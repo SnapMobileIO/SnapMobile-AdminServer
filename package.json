@@ -12,7 +12,7 @@
   "author": "Jack Cable",
   "license": "ISC",
   "dependencies": {
-    "snapmobile-authserver": "git+https://62c8578b25fe85a6cd679783c834bee2ece03e39:x-oauth-basic@github.com/SnapMobileIO/SnapMobile-AuthServer.git"
+    "snapmobile-authserver": "git+https://1e8b0a2166919016f0b18bdf4017d107dedb29af:x-oauth-basic@github.com/SnapMobileIO/SnapMobile-AuthServer.git"
   },
   "devDependencies": {
     "babel-cli": "^6.6.5",
