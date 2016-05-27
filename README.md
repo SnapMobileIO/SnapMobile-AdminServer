@@ -5,7 +5,7 @@ A npm module for a server-side admin server
 
 Include this private module by adding the following under `dependencies` in `package.json`, and run `npm install`.
 
-    "snapmobile-auth": "git+https://62c8578b25fe85a6cd679783c834bee2ece03e39:x-oauth-basic@github.com/SnapMobileIO/SnapMobile-AdminServer.git",
+    "snapmobile-auth": "git+https://1e8b0a2166919016f0b18bdf4017d107dedb29af:x-oauth-basic@github.com/SnapMobileIO/SnapMobile-AdminServer.git",
 
 To configure, add the following to `routes.js`:
 
