@@ -11,8 +11,6 @@ var auth;
 
 const router = express.Router();
 
-// auth.setUser(User);
-
 const attachClass = function() {
   return compose()
     .use((req, res, next) => {
@@ -35,6 +33,7 @@ module.exports = {
 		 */
 		router.get('/:className/schema', auth.hasRole('admin'), attachClass(), controller.getSchema);
 		router.post('/:className/deleteMultiple', auth.hasRole('admin'), attachClass(), controller.destroyMultiple);
+		router.get('/:className/exportToCsv', auth.hasRole('admin'), attachClass(), controller.exportToCsv);
 
 		router.get('/:className/', auth.hasRole('admin'), attachClass(), controller.index);
 		router.get('/:className/:id', auth.hasRole('admin'), attachClass(), controller.show);

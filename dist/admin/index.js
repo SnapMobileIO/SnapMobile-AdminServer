@@ -29,8 +29,6 @@ var auth;
 
 var router = _express2.default.Router();
 
-// auth.setUser(User);
-
 var attachClass = function attachClass() {
 	return (0, _composableMiddleware2.default)().use(function (req, res, next) {
 		// TODO: Check that the classname exists (in mongoose.models)
@@ -52,6 +50,7 @@ module.exports = {
    */
 		router.get('/:className/schema', auth.hasRole('admin'), attachClass(), controller.getSchema);
 		router.post('/:className/deleteMultiple', auth.hasRole('admin'), attachClass(), controller.destroyMultiple);
+		router.get('/:className/exportToCsv', auth.hasRole('admin'), attachClass(), controller.exportToCsv);
 
 		router.get('/:className/', auth.hasRole('admin'), attachClass(), controller.index);
 		router.get('/:className/:id', auth.hasRole('admin'), attachClass(), controller.show);

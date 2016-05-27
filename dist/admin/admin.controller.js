@@ -11,10 +11,15 @@ exports.create = create;
 exports.update = update;
 exports.destroy = destroy;
 exports.destroyMultiple = destroyMultiple;
+exports.exportToCsv = exportToCsv;
 
 var _lodash = require('lodash');
 
 var _lodash2 = _interopRequireDefault(_lodash);
+
+var _moment = require('moment');
+
+var _moment2 = _interopRequireDefault(_moment);
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
@@ -103,5 +108,22 @@ function destroyMultiple(req, res, next) {
     if (result) {
       res.status(204).end();
     }
+  }).catch(utils.handleError(next));
+}
+
+/**
+ * Gets a list of documents and converts them to a CSV string
+ */
+function exportToCsv(req, res, next) {
+  var searchFilters = req.query.filters;
+  var searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
+  var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
+  req.class.find(searchQuery).then(function (result) {
+    var headers = Object.keys(req.class.schema.paths);
+    var convertedString = utils.convertToCsv(result, headers);
+    res.set('Content-Type', 'text/csv');
+    res.set('Content-Disposition', 'attachment; filename=' + filename);
+    res.send(convertedString);
   }).catch(utils.handleError(next));
 }

@@ -1,6 +1,7 @@
 'use strict';
 
 import _ from 'lodash';
+import moment from 'moment';
 
 // TODO: Add frozen properties that should not be returned (e.g., password, salt, etc.)
 
@@ -111,6 +112,25 @@ export function destroyMultiple(req, res, next) {
       if (result) {
         res.status(204).end();
       }
+    })
+    .catch(utils.handleError(next));
+}
+
+/**
+ * Gets a list of documents and converts them to a CSV string
+ */
+export function exportToCsv(req, res, next) {
+  let searchFilters = req.query.filters;
+  let searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  let currentDate = moment().format('YYYY-MM-D');
+  let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
+  req.class.find(searchQuery)
+    .then(function(result) {
+      let headers = Object.keys(req.class.schema.paths);
+      let convertedString = utils.convertToCsv(result, headers);
+      res.set('Content-Type', 'text/csv');
+      res.set('Content-Disposition', 'attachment; filename=' + filename);
+      res.send(convertedString);
     })
     .catch(utils.handleError(next));
 }
