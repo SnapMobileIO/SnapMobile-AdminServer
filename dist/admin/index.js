@@ -44,6 +44,10 @@ var attachClass = function attachClass() {
   });
 };
 
+/**
+ * Sets the User class of Admin and its dependencies for reference
+ * @param {User} _user An instance of the User class
+ */
 function setUser(_user) {
   User = _user;
 
@@ -65,6 +69,10 @@ function setUser(_user) {
   router.delete('/:className/:id', auth.hasRole('admin'), attachClass(), controller.destroy);
 }
 
+/**
+ * Sets the Utils class of Admin and its dependencies for reference
+ * @param {Utils} _utils An instance of the Utils class
+ */
 function setUtils(_utils) {
   controller.setUtils(_utils);
 }
