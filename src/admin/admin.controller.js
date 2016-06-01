@@ -2,14 +2,28 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-
-// TODO: Add frozen properties that should not be returned (e.g., password, salt, etc.)
+import * as utils from '../../components/utils';
 
 var utils;
 
 export function setUtils(_utils) {
   utils = _utils;
 }
+
+const blacklistRequestAttributes = ['_id',
+                                    'password',
+                                    'salt',
+                                    'resetPasswordExpires',
+                                    'resetPasswordToken',
+                                    'updatedAt',
+                                    'createdAt',
+                                    '__v'];
+const blacklistResponseAttributes = ['_id',
+                                     'password',
+                                     'salt',
+                                     'resetPasswordExpires',
+                                     'resetPasswordToken',
+                                     '__v'];
 
 /**
  * Return the mongoose schema for the class
@@ -39,7 +53,7 @@ export function index(req, res, next) {
         .then((result) => {
           return { itemCount: count, items: result };
         })
-        .then(utils.respondWithResult(res))
+        .then(utils.respondWithResult(res, blacklistResponseAttributes))
         .catch(utils.handleError(next));
     })
     .catch(utils.handleError(next));
@@ -54,7 +68,7 @@ export function show(req, res, next) {
     .then((result) => {
       return result;
     })
-    .then(utils.respondWithResult(res))
+    .then(utils.respondWithResult(res, blacklistResponseAttributes))
     .catch(utils.handleError(next));
 }
 
@@ -66,7 +80,7 @@ export function create(req, res, next) {
     .then((result) => {
       return result;
     })
-    .then(utils.respondWithResult(res))
+    .then(utils.respondWithResult(res, blacklistResponseAttributes))
     .catch(utils.handleError(next));
 }
 
@@ -76,6 +90,7 @@ export function create(req, res, next) {
 export function update(req, res, next) {
   req.class.findOne({ _id: req.params.id })
     .then(utils.handleEntityNotFound(res))
+    .then(utils.cleanRequest(req, blacklistRequestAttributes))
     .then(result => {
       if (req.body._id) {
         delete req.body._id;
@@ -84,7 +99,7 @@ export function update(req, res, next) {
       let updated = _.assign(result, req.body);
       return updated.save();
     })
-    .then(utils.respondWithResult(res))
+    .then(utils.respondWithResult(res, blacklistResponseAttributes))
     .catch(utils.handleError(next));
 }
 
@@ -125,7 +140,7 @@ export function exportToCsv(req, res, next) {
   let currentDate = moment().format('YYYY-MM-D');
   let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
   req.class.find(searchQuery)
-    .then(function(result) {
+    .then((result) => {
       let headers = Object.keys(req.class.schema.paths);
       let convertedString = utils.convertToCsv(result, headers);
       res.set('Content-Type', 'text/csv');
