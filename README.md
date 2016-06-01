@@ -9,7 +9,7 @@ Include this private module by adding the following under `dependencies` in `pac
 
 To configure, add the following to `routes.js`:
 
-```
+```javascript
 import User from '../app/user/user.model';
 ...
 let admin = require('snapmobile-adminserver');
