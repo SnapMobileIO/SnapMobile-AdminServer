@@ -12,6 +12,7 @@ exports.update = update;
 exports.destroy = destroy;
 exports.destroyMultiple = destroyMultiple;
 exports.exportToCsv = exportToCsv;
+exports.importFromCsv = importFromCsv;
 
 var _lodash = require('lodash');
 
@@ -21,15 +22,22 @@ var _moment = require('moment');
 
 var _moment2 = _interopRequireDefault(_moment);
 
-function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+var _snapmobileAws = require('snapmobile-aws');
 
-// TODO: Add frozen properties that should not be returned (e.g., password, salt, etc.)
+var _bluebird = require('bluebird');
+
+var _bluebird2 = _interopRequireDefault(_bluebird);
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var utils;
 
 function setUtils(_utils) {
   utils = _utils;
 }
+
+var blacklistRequestAttributes = ['_id', 'password', 'salt', 'resetPasswordExpires', 'resetPasswordToken', 'updatedAt', 'createdAt', '__v'];
+var blacklistResponseAttributes = ['_id', 'password', 'salt', 'resetPasswordExpires', 'resetPasswordToken', '__v'];
 
 /**
  * Return the mongoose schema for the class
@@ -53,7 +61,7 @@ function index(req, res, next) {
 
     req.class.find(searchQuery).sort(sort).limit(limit).skip(skip).then(function (result) {
       return { itemCount: count, items: result };
-    }).then(utils.respondWithResult(res)).catch(utils.handleError(next));
+    }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
   }).catch(utils.handleError(next));
 }
 
@@ -63,7 +71,7 @@ function index(req, res, next) {
 function show(req, res, next) {
   req.class.findOne({ _id: req.params.id }).then(utils.handleEntityNotFound(res)).then(function (result) {
     return result;
-  }).then(utils.respondWithResult(res)).catch(utils.handleError(next));
+  }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }
 
 /**
@@ -72,21 +80,21 @@ function show(req, res, next) {
 function create(req, res, next) {
   req.class.create(req.body).then(function (result) {
     return result;
-  }).then(utils.respondWithResult(res)).catch(utils.handleError(next));
+  }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }
 
 /**
  * Updates an existing document in the DB
  */
 function update(req, res, next) {
-  req.class.findOne({ _id: req.params.id }).then(utils.handleEntityNotFound(res)).then(function (result) {
+  req.class.findOne({ _id: req.params.id }).then(utils.handleEntityNotFound(res)).then(utils.cleanRequest(req, blacklistRequestAttributes)).then(function (result) {
     if (req.body._id) {
       delete req.body._id;
     }
 
     var updated = _lodash2.default.assign(result, req.body);
     return updated.save();
-  }).then(utils.respondWithResult(res)).catch(utils.handleError(next));
+  }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }
 
 /**
@@ -126,4 +134,53 @@ function exportToCsv(req, res, next) {
     res.set('Content-Disposition', 'attachment; filename=' + filename);
     res.send(convertedString);
   }).catch(utils.handleError(next));
+}
+
+function importFromCsv(req, res, next) {
+  console.log(req.body);
+  var url = req.body.url;
+  var response = _snapmobileAws.awsHelper.getFile(url);
+  response.then(function (response) {
+    console.log(response.Body.toString('utf8'));
+    var responseString = response.Body.toString('utf8').replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
+    var lines = responseString.split('\n');
+
+    var schemaHeaders = Object.keys(req.class.schema.paths);
+
+    var headerString = schemaHeaders.join(',');
+
+    // check if header matches schema
+    if (lines.length == 0 || lines[0] != headerString) {
+      res.status(400).json({
+        message: 'CSV header does not match object'
+      });
+    }
+
+    var responseArray = utils.CSVToArray(responseString);
+    var errorArray = [];
+
+    for (var i = 1; i < responseArray.length; i++) {
+      var object = [];
+      for (var j = 0; j < schemaHeaders.length; j++) {
+        if (blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+          continue;
+        }
+
+        object[schemaHeaders[j]] = responseArray[i][j];
+      }
+
+      req.class.create(object).catch(function (error) {
+        errorArray.push(error);
+      });
+    }
+
+    if (errorArray.length == 0) {
+      res.status(204).end();
+    } else {
+      res.status(400).end('Failed with errors.');
+    }
+  }, function (error) {
+    console.log('error');
+    console.log(response);
+  });
 }

@@ -2,7 +2,8 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-import * as utils from '../../components/utils';
+import { awsHelper as awsHelper } from 'snapmobile-aws';
+import Promise from 'bluebird';
 
 var utils;
 
@@ -148,4 +149,60 @@ export function exportToCsv(req, res, next) {
       res.send(convertedString);
     })
     .catch(utils.handleError(next));
+}
+
+export function importFromCsv(req, res, next) {
+  console.log(req.body);
+  let url = req.body.url;
+  let response = awsHelper.getFile(url);
+  response.then(function(response) {
+    console.log(response.Body.toString('utf8'));
+    let responseString = response.Body.toString('utf8')
+      .replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
+    var lines = responseString.split('\n');
+
+    let schemaHeaders = Object.keys(req.class.schema.paths);
+
+    let headerString = schemaHeaders.join(',');
+
+    // check if header matches schema
+    if (lines.length == 0 || lines[0] != headerString) {
+      res.status(400).json({
+        message: 'CSV header does not match object'
+      });
+    }
+
+    var responseArray = utils.CSVToArray(responseString);
+    var errorArray = [];
+
+    for (var i = 1; i < responseArray.length; i++) {
+      var object = [];
+      for (var j = 0; j < schemaHeaders.length; j++) {
+        if (blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+          continue;
+        }
+
+        object[schemaHeaders[j]] = responseArray[i][j];
+      }
+
+      req.class.create(object)
+        .catch(function(error) {
+          errorArray.push(error);
+        });
+
+    }
+
+    if (errorArray.length == 0) {
+      res.status(204).end();
+    } else {
+      res.status(400).end('Failed with errors.');
+    }
+
+  },
+
+  function(error) {
+    console.log('error');
+    console.log(response);
+  });
+
 }
