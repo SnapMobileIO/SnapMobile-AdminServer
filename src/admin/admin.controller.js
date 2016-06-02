@@ -151,6 +151,9 @@ export function exportToCsv(req, res, next) {
     .catch(utils.handleError(next));
 }
 
+/**
+ * Imports objects from a csv file hosted at req.body.url
+ */
 export function importFromCsv(req, res, next) {
   console.log(req.body);
   let url = req.body.url;
@@ -166,17 +169,35 @@ export function importFromCsv(req, res, next) {
     let headerString = schemaHeaders.join(',');
 
     // check if header matches schema
-    if (lines.length == 0 || lines[0] != headerString) {
-      res.status(400).json({
-        message: 'CSV header does not match object'
-      });
+    if (lines.length <= 1 || lines[0] != headerString) {
+      res.status(400).end(JSON.stringify(
+        { errors:
+          { error:
+            { message: 'CSV header does not match object' }
+        }
+      }));
     }
 
     var responseArray = utils.CSVToArray(responseString);
-    var errorArray = [];
+    var erroredRows = [];
+    var finishedRows = 0;
+    var returnIfFinished = function() {
+      if (finishedRows == responseArray.length - 1) {
+        if (erroredRows.length == 0) {
+          res.status(204).end();
+        } else {
+          let errors = {};
+          for (var i = 0; i < erroredRows.length; i++) {
+            errors['error' + i] = { message: 'Unable to add row: ' + erroredRows[i] };
+          }
+
+          res.status(400).end(JSON.stringify({ errors: errors }));
+        }
+      }
+    };
 
     for (var i = 1; i < responseArray.length; i++) {
-      var object = [];
+      var object = {};
       for (var j = 0; j < schemaHeaders.length; j++) {
         if (blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
           continue;
@@ -185,24 +206,26 @@ export function importFromCsv(req, res, next) {
         object[schemaHeaders[j]] = responseArray[i][j];
       }
 
-      req.class.create(object)
-        .catch(function(error) {
-          errorArray.push(error);
+      req.class.create(object).then(function(result) {
+          finishedRows++;
+          returnIfFinished();
+        }).catch(function(error) {
+          finishedRows++;
+          erroredRows.push(error);
+          returnIfFinished();
         });
 
-    }
-
-    if (errorArray.length == 0) {
-      res.status(204).end();
-    } else {
-      res.status(400).end('Failed with errors.');
     }
 
   },
 
   function(error) {
-    console.log('error');
-    console.log(response);
+    res.status(400).end(JSON.stringify(
+      { errors:
+        { error:
+          { message: 'An unknown error occured. Please try again.' }
+      }
+    }));
   });
 
 }
