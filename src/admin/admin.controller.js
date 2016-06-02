@@ -2,7 +2,8 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-import * as utils from '../../components/utils';
+import { awsHelper as awsHelper } from 'snapmobile-aws';
+import Promise from 'bluebird';
 
 var utils;
 
@@ -148,4 +149,102 @@ export function exportToCsv(req, res, next) {
       res.send(convertedString);
     })
     .catch(utils.handleError(next));
+}
+
+/**
+ * Imports objects from a csv file hosted at req.body.url
+ */
+export function importFromCsv(req, res, next) {
+  console.log(req.body);
+  let url = req.body.url;
+  let response = awsHelper.getFile(url);
+  response.then(function(response) {
+    console.log(response.Body.toString('utf8'));
+    let responseString = response.Body.toString('utf8')
+      .replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
+    var lines = responseString.split('\n');
+
+    let schemaHeaders = Object.keys(req.class.schema.paths);
+
+    let headerString = schemaHeaders.join(',');
+
+    // check if header matches schema
+    if (lines.length <= 1 || lines[0] != headerString) {
+      res.status(400).end(JSON.stringify(
+        { errors:
+          { error:
+            { message: 'CSV header does not match object' }
+        }
+      }));
+    }
+
+    var createWithRow = function(object, row, successCallback, errorCallback) {
+      req.class.create(object).then(function(result) {
+          successCallback(result, row);
+        }).catch(function(error) {
+          errorCallback(error, row);
+        });
+    };
+
+    var responseArray = utils.CSVToArray(responseString);
+    var erroredRows = {};
+    var finishedRows = 0;
+    var returnIfFinished = function() {
+      if (finishedRows == responseArray.length - 1) {
+        var numErrors = Object.keys(erroredRows).length;
+        if (numErrors == 0) {
+          res.status(204).end();
+        } else {
+          var errors = {};
+          var numErrorsToDisplay = 5;
+          var numExtraErrors = numErrors - numErrorsToDisplay;
+          for (var key in erroredRows) {
+            if (numErrorsToDisplay == 0) { continue; }
+
+            numErrorsToDisplay--;
+            errors['error' + key] = { message: 'Unable to add row: ' +
+              key + ' with error: ' + erroredRows[key] };
+          }
+
+          if (numExtraErrors > 0) {
+            errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
+          }
+
+          res.status(400).end(JSON.stringify({ errors: errors }));
+        }
+      }
+    };
+
+    for (var i = 1; i < responseArray.length; i++) {
+      var object = {};
+      for (var j = 0; j < schemaHeaders.length; j++) {
+        if (blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+          continue;
+        }
+
+        object[schemaHeaders[j]] = responseArray[i][j];
+      }
+
+      createWithRow(object, i, (result, row) => {
+        finishedRows++;
+        returnIfFinished();
+      }, (error, row) => {
+        finishedRows++;
+        erroredRows[row] = error;
+        returnIfFinished();
+      });
+
+    }
+
+  },
+
+  function(error) {
+    res.status(400).end(JSON.stringify(
+      { errors:
+        { error:
+          { message: 'An unknown error occured. Please try again.' }
+      }
+    }));
+  });
+
 }

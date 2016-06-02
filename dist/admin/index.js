@@ -60,6 +60,7 @@ function setUser(_user) {
   router.get('/:className/schema', auth.hasRole('admin'), attachClass(), controller.getSchema);
   router.post('/:className/deleteMultiple', auth.hasRole('admin'), attachClass(), controller.destroyMultiple);
   router.get('/:className/exportToCsv', auth.hasRole('admin'), attachClass(), controller.exportToCsv);
+  router.post('/:className/importFromCsv', auth.hasRole('admin'), attachClass(), controller.importFromCsv);
 
   router.get('/:className/', auth.hasRole('admin'), attachClass(), controller.index);
   router.get('/:className/:id', auth.hasRole('admin'), attachClass(), controller.show);
