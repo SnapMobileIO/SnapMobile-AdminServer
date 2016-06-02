@@ -178,17 +178,36 @@ export function importFromCsv(req, res, next) {
       }));
     }
 
+    var createWithRow = function(object, row, successCallback, errorCallback) {
+      req.class.create(object).then(function(result) {
+          successCallback(result, row);
+        }).catch(function(error) {
+          errorCallback(error, row);
+        });
+    };
+
     var responseArray = utils.CSVToArray(responseString);
-    var erroredRows = [];
+    var erroredRows = {};
     var finishedRows = 0;
     var returnIfFinished = function() {
       if (finishedRows == responseArray.length - 1) {
-        if (erroredRows.length == 0) {
+        var numErrors = Object.keys(erroredRows).length;
+        if (numErrors == 0) {
           res.status(204).end();
         } else {
-          let errors = {};
-          for (var i = 0; i < erroredRows.length; i++) {
-            errors['error' + i] = { message: 'Unable to add row: ' + erroredRows[i] };
+          var errors = {};
+          var numErrorsToDisplay = 5;
+          var numExtraErrors = numErrors - numErrorsToDisplay;
+          for (var key in erroredRows) {
+            if (numErrorsToDisplay == 0) { continue; }
+
+            numErrorsToDisplay--;
+            errors['error' + key] = { message: 'Unable to add row: ' +
+              key + ' with error: ' + erroredRows[key] };
+          }
+
+          if (numExtraErrors > 0) {
+            errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
           }
 
           res.status(400).end(JSON.stringify({ errors: errors }));
@@ -206,14 +225,14 @@ export function importFromCsv(req, res, next) {
         object[schemaHeaders[j]] = responseArray[i][j];
       }
 
-      req.class.create(object).then(function(result) {
-          finishedRows++;
-          returnIfFinished();
-        }).catch(function(error) {
-          finishedRows++;
-          erroredRows.push(error);
-          returnIfFinished();
-        });
+      createWithRow(object, i, (result, row) => {
+        finishedRows++;
+        returnIfFinished();
+      }, (error, row) => {
+        finishedRows++;
+        erroredRows[row] = error;
+        returnIfFinished();
+      });
 
     }
 

@@ -159,17 +159,37 @@ function importFromCsv(req, res, next) {
       }));
     }
 
+    var createWithRow = function createWithRow(object, row, successCallback, errorCallback) {
+      req.class.create(object).then(function (result) {
+        successCallback(result, row);
+      }).catch(function (error) {
+        errorCallback(error, row);
+      });
+    };
+
     var responseArray = utils.CSVToArray(responseString);
-    var erroredRows = [];
+    var erroredRows = {};
     var finishedRows = 0;
     var returnIfFinished = function returnIfFinished() {
       if (finishedRows == responseArray.length - 1) {
-        if (erroredRows.length == 0) {
+        var numErrors = Object.keys(erroredRows).length;
+        if (numErrors == 0) {
           res.status(204).end();
         } else {
           var errors = {};
-          for (var i = 0; i < erroredRows.length; i++) {
-            errors['error' + i] = { message: 'Unable to add row: ' + erroredRows[i] };
+          var numErrorsToDisplay = 5;
+          var numExtraErrors = numErrors - numErrorsToDisplay;
+          for (var key in erroredRows) {
+            if (numErrorsToDisplay == 0) {
+              continue;
+            }
+
+            numErrorsToDisplay--;
+            errors['error' + key] = { message: 'Unable to add row: ' + key + ' with error: ' + erroredRows[key] };
+          }
+
+          if (numExtraErrors > 0) {
+            errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
           }
 
           res.status(400).end(JSON.stringify({ errors: errors }));
@@ -187,12 +207,12 @@ function importFromCsv(req, res, next) {
         object[schemaHeaders[j]] = responseArray[i][j];
       }
 
-      req.class.create(object).then(function (result) {
+      createWithRow(object, i, function (result, row) {
         finishedRows++;
         returnIfFinished();
-      }).catch(function (error) {
+      }, function (error, row) {
         finishedRows++;
-        erroredRows.push(error);
+        erroredRows[row] = error;
         returnIfFinished();
       });
     }
