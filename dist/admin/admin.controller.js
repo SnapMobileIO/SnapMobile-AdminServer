@@ -142,11 +142,9 @@ function exportToCsv(req, res, next) {
  * Imports objects from a csv file hosted at req.body.url
  */
 function importFromCsv(req, res, next) {
-  console.log(req.body);
   var url = req.body.url;
   var response = _snapmobileAws.awsHelper.getFile(url);
   response.then(function (response) {
-    console.log(response.Body.toString('utf8'));
     var responseString = response.Body.toString('utf8').replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
     var lines = responseString.split('\n');
 
@@ -155,49 +153,15 @@ function importFromCsv(req, res, next) {
     var headerString = schemaHeaders.join(',');
 
     // check if header matches schema
-    if (lines.length <= 1 || lines[0] != headerString) {
+    if (lines.length <= 1 || lines[0] !== headerString) {
       res.status(400).end(JSON.stringify({ errors: { error: { message: 'CSV header does not match object' }
         }
       }));
     }
 
-    var createWithRow = function createWithRow(object, row, successCallback, errorCallback) {
-      req.class.create(object).then(function (result) {
-        successCallback(result, row);
-      }).catch(function (error) {
-        errorCallback(error, row);
-      });
-    };
-
     var responseArray = (0, _adminHelper.csvToArray)(responseString);
     var erroredRows = {};
     var finishedRows = 0;
-    var returnIfFinished = function returnIfFinished() {
-      if (finishedRows == responseArray.length - 1) {
-        var numErrors = Object.keys(erroredRows).length;
-        if (numErrors == 0) {
-          res.status(204).end();
-        } else {
-          var errors = {};
-          var numErrorsToDisplay = 5;
-          var numExtraErrors = numErrors - numErrorsToDisplay;
-          for (var key in erroredRows) {
-            if (numErrorsToDisplay == 0) {
-              continue;
-            }
-
-            numErrorsToDisplay--;
-            errors['error' + key] = { message: 'Unable to add row: ' + key + ' with error: ' + erroredRows[key] };
-          }
-
-          if (numExtraErrors > 0) {
-            errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
-          }
-
-          res.status(400).end(JSON.stringify({ errors: errors }));
-        }
-      }
-    };
 
     for (var i = 1; i < responseArray.length; i++) {
       var object = {};
@@ -209,13 +173,13 @@ function importFromCsv(req, res, next) {
         object[schemaHeaders[j]] = responseArray[i][j];
       }
 
-      createWithRow(object, i, function (result, row) {
+      createWithRow(req, object, i, function (result, row) {
         finishedRows++;
-        returnIfFinished();
+        returnIfFinished(res, finishedRows, responseArray, erroredRows);
       }, function (error, row) {
         finishedRows++;
         erroredRows[row] = error;
-        returnIfFinished();
+        returnIfFinished(res, finishedRows, responseArray, erroredRows);
       });
     }
   }, function (error) {
@@ -223,4 +187,54 @@ function importFromCsv(req, res, next) {
       }
     }));
   });
+}
+
+/**
+ * Creates an object and returns the passed row
+ * @param {Object} req the req parameter
+ * @param  {Object} object          the object number
+ * @param  {Int} row             the row number
+ * @param  {func} successCallback on success
+ * @param  {func} errorCallback   on error
+ */
+function createWithRow(req, object, row, successCallback, errorCallback) {
+  req.class.create(object).then(function (result) {
+    successCallback(result, row);
+  }).catch(function (error) {
+    errorCallback(error, row);
+  });
+};
+
+/**
+ * Ends the current request if all imports have finished
+ * @param  {Object} res the res parameter
+ * @param  {Integer} finishedRows the number of finished rows
+ * @param  {Array} responseArray  the CSV array
+ * @param  {Object} erroredRows   the rows that have errored
+ */
+function returnIfFinished(res, finishedRows, responseArray, erroredRows) {
+  if (finishedRows == responseArray.length - 1) {
+    var numErrors = Object.keys(erroredRows).length;
+    if (numErrors == 0) {
+      res.status(204).end();
+    } else {
+      var errors = {};
+      var numErrorsToDisplay = 5;
+      var numExtraErrors = numErrors - numErrorsToDisplay;
+      for (var key in erroredRows) {
+        if (numErrorsToDisplay == 0) {
+          continue;
+        }
+
+        numErrorsToDisplay--;
+        errors['error' + key] = { message: 'Unable to add row: ' + key + ' with error: ' + erroredRows[key] };
+      }
+
+      if (numExtraErrors > 0) {
+        errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
+      }
+
+      res.status(400).end(JSON.stringify({ errors: errors }));
+    }
+  }
 }

@@ -2,9 +2,9 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-import { awsHelper as awsHelper } from 'snapmobile-aws';
+import { awsHelper } from 'snapmobile-aws';
 import Promise from 'bluebird';
-import { convertToCsv as convertToCsv, csvToArray as csvToArray } from './admin.helper.js';
+import { convertToCsv, csvToArray } from './admin.helper.js';
 
 var utils;
 
@@ -156,21 +156,19 @@ export function exportToCsv(req, res, next) {
  * Imports objects from a csv file hosted at req.body.url
  */
 export function importFromCsv(req, res, next) {
-  console.log(req.body);
   let url = req.body.url;
   let response = awsHelper.getFile(url);
-  response.then(function(response) {
-    console.log(response.Body.toString('utf8'));
+  response.then((response) => {
     let responseString = response.Body.toString('utf8')
       .replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
-    var lines = responseString.split('\n');
+    let lines = responseString.split('\n');
 
     let schemaHeaders = Object.keys(req.class.schema.paths);
 
     let headerString = schemaHeaders.join(',');
 
     // check if header matches schema
-    if (lines.length <= 1 || lines[0] != headerString) {
+    if (lines.length <= 1 || lines[0] !== headerString) {
       res.status(400).end(JSON.stringify(
         { errors:
           { error:
@@ -179,42 +177,9 @@ export function importFromCsv(req, res, next) {
       }));
     }
 
-    var createWithRow = function(object, row, successCallback, errorCallback) {
-      req.class.create(object).then(function(result) {
-          successCallback(result, row);
-        }).catch(function(error) {
-          errorCallback(error, row);
-        });
-    };
-
-    var responseArray = csvToArray(responseString);
+    let responseArray = csvToArray(responseString);
     var erroredRows = {};
     var finishedRows = 0;
-    var returnIfFinished = function() {
-      if (finishedRows == responseArray.length - 1) {
-        var numErrors = Object.keys(erroredRows).length;
-        if (numErrors == 0) {
-          res.status(204).end();
-        } else {
-          var errors = {};
-          var numErrorsToDisplay = 5;
-          var numExtraErrors = numErrors - numErrorsToDisplay;
-          for (var key in erroredRows) {
-            if (numErrorsToDisplay == 0) { continue; }
-
-            numErrorsToDisplay--;
-            errors['error' + key] = { message: 'Unable to add row: ' +
-              key + ' with error: ' + erroredRows[key] };
-          }
-
-          if (numExtraErrors > 0) {
-            errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
-          }
-
-          res.status(400).end(JSON.stringify({ errors: errors }));
-        }
-      }
-    };
 
     for (var i = 1; i < responseArray.length; i++) {
       var object = {};
@@ -226,13 +191,13 @@ export function importFromCsv(req, res, next) {
         object[schemaHeaders[j]] = responseArray[i][j];
       }
 
-      createWithRow(object, i, (result, row) => {
+      createWithRow(req, object, i, (result, row) => {
         finishedRows++;
-        returnIfFinished();
+        returnIfFinished(res, finishedRows, responseArray, erroredRows);
       }, (error, row) => {
         finishedRows++;
         erroredRows[row] = error;
-        returnIfFinished();
+        returnIfFinished(res, finishedRows, responseArray, erroredRows);
       });
 
     }
@@ -248,4 +213,53 @@ export function importFromCsv(req, res, next) {
     }));
   });
 
+}
+
+/**
+ * Creates an object and returns the passed row
+ * @param {Object} req the req parameter
+ * @param  {Object} object          the object number
+ * @param  {Int} row             the row number
+ * @param  {func} successCallback on success
+ * @param  {func} errorCallback   on error
+ */
+function createWithRow(req, object, row, successCallback, errorCallback) {
+  req.class.create(object).then(function(result) {
+      successCallback(result, row);
+    }).catch(function(error) {
+      errorCallback(error, row);
+    });
+};
+
+/**
+ * Ends the current request if all imports have finished
+ * @param  {Object} res the res parameter
+ * @param  {Integer} finishedRows the number of finished rows
+ * @param  {Array} responseArray  the CSV array
+ * @param  {Object} erroredRows   the rows that have errored
+ */
+function returnIfFinished(res, finishedRows, responseArray, erroredRows) {
+  if (finishedRows == responseArray.length - 1) {
+    let numErrors = Object.keys(erroredRows).length;
+    if (numErrors == 0) {
+      res.status(204).end();
+    } else {
+      var errors = {};
+      var numErrorsToDisplay = 5;
+      let numExtraErrors = numErrors - numErrorsToDisplay;
+      for (var key in erroredRows) {
+        if (numErrorsToDisplay == 0) { continue; }
+
+        numErrorsToDisplay--;
+        errors['error' + key] = { message: 'Unable to add row: ' +
+          key + ' with error: ' + erroredRows[key] };
+      }
+
+      if (numExtraErrors > 0) {
+        errors.excess = { message: 'And ' + numExtraErrors + ' more errors' };
+      }
+
+      res.status(400).end(JSON.stringify({ errors: errors }));
+    }
+  }
 }
