@@ -28,6 +28,8 @@ var _bluebird = require('bluebird');
 
 var _bluebird2 = _interopRequireDefault(_bluebird);
 
+var _adminHelper = require('./admin.helper.js');
+
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
 var utils;
@@ -129,7 +131,7 @@ function exportToCsv(req, res, next) {
   var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
   req.class.find(searchQuery).then(function (result) {
     var headers = Object.keys(req.class.schema.paths);
-    var convertedString = utils.convertToCsv(result, headers);
+    var convertedString = (0, _adminHelper.convertToCsv)(result, headers);
     res.set('Content-Type', 'text/csv');
     res.set('Content-Disposition', 'attachment; filename=' + filename);
     res.send(convertedString);
@@ -167,7 +169,7 @@ function importFromCsv(req, res, next) {
       });
     };
 
-    var responseArray = utils.CSVToArray(responseString);
+    var responseArray = (0, _adminHelper.csvToArray)(responseString);
     var erroredRows = {};
     var finishedRows = 0;
     var returnIfFinished = function returnIfFinished() {

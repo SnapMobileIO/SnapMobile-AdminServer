@@ -4,6 +4,7 @@ import _ from 'lodash';
 import moment from 'moment';
 import { awsHelper as awsHelper } from 'snapmobile-aws';
 import Promise from 'bluebird';
+import { convertToCsv as convertToCsv, csvToArray as csvToArray } from './admin.helper.js';
 
 var utils;
 
@@ -143,7 +144,7 @@ export function exportToCsv(req, res, next) {
   req.class.find(searchQuery)
     .then((result) => {
       let headers = Object.keys(req.class.schema.paths);
-      let convertedString = utils.convertToCsv(result, headers);
+      let convertedString = convertToCsv(result, headers);
       res.set('Content-Type', 'text/csv');
       res.set('Content-Disposition', 'attachment; filename=' + filename);
       res.send(convertedString);
@@ -186,7 +187,7 @@ export function importFromCsv(req, res, next) {
         });
     };
 
-    var responseArray = utils.CSVToArray(responseString);
+    var responseArray = csvToArray(responseString);
     var erroredRows = {};
     var finishedRows = 0;
     var returnIfFinished = function() {
