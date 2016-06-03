@@ -38,7 +38,12 @@ var router = exports.router = _express2.default.Router();
 
 var attachClass = function attachClass() {
   return (0, _composableMiddleware2.default)().use(function (req, res, next) {
-    // TODO: Check that the classname exists (in mongoose.models)
+    if (_mongoose2.default.modelNames().indexOf(req.params.className) === -1) {
+      res.status(404).end(JSON.stringify({ errors: { error: { message: 'Could not find class: ' + req.params.className }
+        }
+      }));
+    }
+
     req.class = _mongoose2.default.model(req.params.className);
     next();
   });

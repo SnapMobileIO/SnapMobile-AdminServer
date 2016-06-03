@@ -14,7 +14,15 @@ export const router = express.Router();
 const attachClass = function() {
   return compose()
     .use((req, res, next) => {
-      // TODO: Check that the classname exists (in mongoose.models)
+      if (mongoose.modelNames().indexOf(req.params.className) === -1) {
+        res.status(404).end(JSON.stringify(
+          { errors:
+            { error:
+              { message: 'Could not find class: ' + req.params.className }
+          }
+        }));
+      }
+
       req.class = mongoose.model(req.params.className);
       next();
     });
