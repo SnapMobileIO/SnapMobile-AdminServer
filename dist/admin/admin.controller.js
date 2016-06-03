@@ -72,6 +72,10 @@ function index(req, res, next) {
  */
 function show(req, res, next) {
   req.class.findOne({ _id: req.params.id }).then(utils.handleEntityNotFound(res)).then(function (result) {
+    if (result.children) {
+      result.children = result.getChildren();
+    }
+
     return result;
   }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }

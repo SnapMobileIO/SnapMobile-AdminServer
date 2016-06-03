@@ -68,6 +68,10 @@ export function show(req, res, next) {
   req.class.findOne({ _id: req.params.id })
     .then(utils.handleEntityNotFound(res))
     .then((result) => {
+      if (result.children) {
+        result.children = result.getChildren();
+      }
+
       return result;
     })
     .then(utils.respondWithResult(res, blacklistResponseAttributes))
