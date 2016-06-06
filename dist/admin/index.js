@@ -56,7 +56,6 @@ var attachClass = function attachClass() {
 function setUser(_user) {
   User = _user;
 
-  _snapmobileAuthserver2.default.setUser(User);
   auth = _snapmobileAuthserver2.default.authService;
 
   /**
