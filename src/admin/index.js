@@ -35,6 +35,7 @@ const attachClass = function() {
 export function setUser(_user) {
   User = _user;
 
+  authServer.setUser(User);
   auth = authServer.authService;
 
   /**
