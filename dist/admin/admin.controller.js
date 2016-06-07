@@ -166,7 +166,7 @@ function importFromCsv(req, res, next) {
     for (var i = 1; i < responseArray.length; i++) {
       var object = {};
       for (var j = 0; j < schemaHeaders.length; j++) {
-        if (blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+        if (schemaHeaders[j] != '_id' && blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
           continue;
         }
 
@@ -198,10 +198,22 @@ function importFromCsv(req, res, next) {
  * @param  {func} errorCallback   on error
  */
 function createWithRow(req, object, row, successCallback, errorCallback) {
-  req.class.create(object).then(function (result) {
-    successCallback(result, row);
-  }).catch(function (error) {
-    errorCallback(error, row);
+  req.class.findById(object._id, function (err, found) {
+    if (found) {
+      //update
+      req.class.update(object).then(function (result) {
+        successCallback(result, row);
+      }).catch(function (error) {
+        errorCallback(error, row);
+      });
+    } else {
+      delete object._id;
+      req.class.create(object).then(function (result) {
+        successCallback(result, row);
+      }).catch(function (error) {
+        errorCallback(error, row);
+      });
+    }
   });
 };
 
