@@ -26,12 +26,12 @@ export function convertToCsv(result, headers) {
 
       // Objects will be added to the CSV as '[Object object]', we want the object
       } else if (!!result[i][headers[x]] &&
-                (result[i][headers[x]].contructor === Array ||
+                (result[i][headers[x]].constructor === Array ||
                  result[i][headers[x]].constructor === Object)) {
 
         // Stringify any objects that are in the db
-        jsonString = JSON.stringify(result[i][headers[x]]);
 
+        jsonString = JSON.stringify(result[i][headers[x]]);
         convertedString += `"${String(jsonString).replace(/\"/g, '""')}"`;
 
       // Double quotes and hanging quotes will break our CSV, replace with "" will fix it
@@ -43,7 +43,7 @@ export function convertToCsv(result, headers) {
     convertedString += lineDelimiter;
   }
 
-  return convertedString;
+  return convertedString.replace(/'/g, '""').replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '""$2"": ');
 }
 
 /**

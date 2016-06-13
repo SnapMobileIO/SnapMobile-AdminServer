@@ -189,7 +189,10 @@ export function importFromCsv(req, res, next) {
           continue;
         }
 
-        object[schemaHeaders[j]] = responseArray[i][j];
+        var jsonElement = responseArray[i][j];
+        jsonElement = JSON.parse(jsonElement);
+
+        object[schemaHeaders[j]] = jsonElement;
       }
 
       createWithRow(req, object, i, (result, row) => {
