@@ -170,10 +170,19 @@ function importFromCsv(req, res, next) {
           continue;
         }
 
-        var jsonElement = responseArray[i][j];
-        jsonElement = JSON.parse(jsonElement);
+        var element = responseArray[i][j];
 
-        object[schemaHeaders[j]] = jsonElement;
+        // If the element is undefined or null, convert to empty string
+        if (!element) {
+          element = '';
+        }
+
+        // If this element isn't a string, then we should try and parse it as JSON
+        if (typeof element !== 'string') {
+          element = JSON.parse(element);
+        }
+
+        object[schemaHeaders[j]] = element;
       }
 
       createWithRow(req, object, i, function (result, row) {
