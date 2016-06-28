@@ -45,10 +45,19 @@ export function index(req, res, next) {
   let searchFilters = req.query.filters;
   let searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
 
+  // See if we have a populate method for our class
+  // if we don't populatedFields should be blank
+  let populatedFields = ''
+
+  if (typeof req.class.populateForAdmin === 'function') {
+    populatedFields = req.class.populateForAdmin();
+  }
+
   req.class.find(searchQuery).count()
     .then(count => {
 
       req.class.find(searchQuery)
+        .populate(populatedFields)
         .sort(sort)
         .limit(limit)
         .skip(skip)
@@ -65,7 +74,16 @@ export function index(req, res, next) {
  * Gets a single document from the DB
  */
 export function show(req, res, next) {
+  // See if we have a populate method for our class
+  // if we don't populatedFields should be blank
+  let populatedFields = ''
+
+  if (typeof req.class.populateForAdmin === 'function') {
+    populatedFields = req.class.populateForAdmin();
+  }
+
   req.class.findOne({ _id: req.params.id })
+    .populate(populatedFields)
     .then(utils.handleEntityNotFound(res))
     .then((result) => {
       return result;

@@ -59,9 +59,17 @@ function index(req, res, next) {
   var searchFilters = req.query.filters;
   var searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
 
+  // See if we have a populate method for our class
+  // if we don't populatedFields should be blank
+  var populatedFields = '';
+
+  if (typeof req.class.populateForAdmin === 'function') {
+    populatedFields = req.class.populateForAdmin();
+  }
+
   req.class.find(searchQuery).count().then(function (count) {
 
-    req.class.find(searchQuery).sort(sort).limit(limit).skip(skip).then(function (result) {
+    req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
       return { itemCount: count, items: result };
     }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
   }).catch(utils.handleError(next));
@@ -71,7 +79,15 @@ function index(req, res, next) {
  * Gets a single document from the DB
  */
 function show(req, res, next) {
-  req.class.findOne({ _id: req.params.id }).then(utils.handleEntityNotFound(res)).then(function (result) {
+  // See if we have a populate method for our class
+  // if we don't populatedFields should be blank
+  var populatedFields = '';
+
+  if (typeof req.class.populateForAdmin === 'function') {
+    populatedFields = req.class.populateForAdmin();
+  }
+
+  req.class.findOne({ _id: req.params.id }).populate(populatedFields).then(utils.handleEntityNotFound(res)).then(function (result) {
     return result;
   }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }
