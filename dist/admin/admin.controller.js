@@ -11,7 +11,6 @@ exports.create = create;
 exports.update = update;
 exports.destroy = destroy;
 exports.destroyMultiple = destroyMultiple;
-exports.exportToCsv = exportToCsv;
 exports.importFromCsv = importFromCsv;
 
 var _lodash = require('lodash');
@@ -53,12 +52,17 @@ function getSchema(req, res, next) {
 }
 
 /**
- * Gets a list of documents
+ * Gets a list of documents based on a search query
+ * If no search query is sent, it will return all documents
+ * If export=true is found in the request query, we will output CSV instead of JSON
  */
 function index(req, res, next) {
   var limit = Number(req.query.limit) || 20;
   var skip = Number(req.query.skip) || 0;
   var sort = req.query.sort || '-createdAt';
+
+  // If export is sent as true in our query, we'll output a CSV instead of JSON
+  var shouldExport = !!req.query.export;
 
   var searchFilters = req.query.filters || [];
   var searchQuery = {};
@@ -67,7 +71,8 @@ function index(req, res, next) {
   // if we don't populatedFields should be blank
   var populatedFields = '';
 
-  if (typeof req.class.populateForAdmin === 'function') {
+  // Don't populate the fields if we are exporting
+  if (typeof req.class.populateForAdmin === 'function' && !shouldExport) {
     populatedFields = req.class.populateForAdmin();
   }
 
@@ -140,7 +145,19 @@ function index(req, res, next) {
     return req.class.find(searchQuery).count().then(function (count) {
 
       return req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
-        return { itemCount: count, items: result };
+
+        if (shouldExport) {
+          var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
+          var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
+          var headers = Object.keys(req.class.schema.paths);
+          var convertedString = (0, _adminHelper.convertToCsv)(result, headers);
+          res.set('Content-Type', 'text/csv');
+          res.set('Content-Disposition', 'attachment; filename=' + filename);
+          res.send(convertedString);
+          return null;
+        } else {
+          return { itemCount: count, items: result };
+        }
       });
     });
   }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
@@ -205,23 +222,6 @@ function destroyMultiple(req, res, next) {
     if (result) {
       res.status(204).end();
     }
-  }).catch(utils.handleError(next));
-}
-
-/**
- * Gets a list of documents and converts them to a CSV string
- */
-function exportToCsv(req, res, next) {
-  var searchFilters = req.query.filters;
-  var searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
-  var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
-  var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
-  req.class.find(searchQuery).then(function (result) {
-    var headers = Object.keys(req.class.schema.paths);
-    var convertedString = (0, _adminHelper.convertToCsv)(result, headers);
-    res.set('Content-Type', 'text/csv');
-    res.set('Content-Disposition', 'attachment; filename=' + filename);
-    res.send(convertedString);
   }).catch(utils.handleError(next));
 }
 

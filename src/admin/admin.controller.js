@@ -36,21 +36,27 @@ export function getSchema(req, res, next) {
 }
 
 /**
- * Gets a list of documents
+ * Gets a list of documents based on a search query
+ * If no search query is sent, it will return all documents
+ * If export=true is found in the request query, we will output CSV instead of JSON
  */
 export function index(req, res, next) {
   let limit = Number(req.query.limit) || 20;
   let skip = Number(req.query.skip) || 0;
   let sort = req.query.sort || '-createdAt';
 
+  // If export is sent as true in our query, we'll output a CSV instead of JSON
+  let shouldExport = !!req.query.export;
+
   let searchFilters = req.query.filters || [];
   let searchQuery = {};
 
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
-  let populatedFields = ''
+  let populatedFields = '';
 
-  if (typeof req.class.populateForAdmin === 'function') {
+  // Don't populate the fields if we are exporting
+  if (typeof req.class.populateForAdmin === 'function' && !shouldExport) {
     populatedFields = req.class.populateForAdmin();
   }
 
@@ -88,7 +94,7 @@ export function index(req, res, next) {
       } else {
         relationshipQuery[searchField]['$eq'] = searchFilters[i].value;
       }
-      
+
       relationshipPromises.push(relationshipClass.find(relationshipQuery, '_id'));
 
     } else {
@@ -105,7 +111,7 @@ export function index(req, res, next) {
 
       // Loop through the results to collect the IDs for each relationship
       for (let i = results.length - 1; i >= 0; i--) {
-        let resultIds = results[i].map((o) => { return o._id.toString() });
+        let resultIds = results[i].map((o) => { return o._id.toString(); });
         let tmpQuery = {};
         tmpQuery[queryOptions[i][0]] = { $in: resultIds };
         searchQuery['$and'].push(tmpQuery);
@@ -129,7 +135,20 @@ export function index(req, res, next) {
             .limit(limit)
             .skip(skip)
             .then((result) => {
-              return { itemCount: count, items: result };
+
+              if (shouldExport) {
+                let currentDate = moment().format('YYYY-MM-D');
+                let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
+                let headers = Object.keys(req.class.schema.paths);
+                let convertedString = convertToCsv(result, headers);
+                res.set('Content-Type', 'text/csv');
+                res.set('Content-Disposition', 'attachment; filename=' + filename);
+                res.send(convertedString);
+                return null;
+
+              } else {
+                return { itemCount: count, items: result };
+              }
             });
         });
     })
@@ -143,7 +162,7 @@ export function index(req, res, next) {
 export function show(req, res, next) {
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
-  let populatedFields = ''
+  let populatedFields = '';
 
   if (typeof req.class.populateForAdmin === 'function') {
     populatedFields = req.class.populateForAdmin();
@@ -214,25 +233,6 @@ export function destroyMultiple(req, res, next) {
       if (result) {
         res.status(204).end();
       }
-    })
-    .catch(utils.handleError(next));
-}
-
-/**
- * Gets a list of documents and converts them to a CSV string
- */
-export function exportToCsv(req, res, next) {
-  let searchFilters = req.query.filters;
-  let searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
-  let currentDate = moment().format('YYYY-MM-D');
-  let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
-  req.class.find(searchQuery)
-    .then((result) => {
-      let headers = Object.keys(req.class.schema.paths);
-      let convertedString = convertToCsv(result, headers);
-      res.set('Content-Type', 'text/csv');
-      res.set('Content-Disposition', 'attachment; filename=' + filename);
-      res.send(convertedString);
     })
     .catch(utils.handleError(next));
 }
