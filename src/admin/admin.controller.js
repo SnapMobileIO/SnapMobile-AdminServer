@@ -78,7 +78,17 @@ export function index(req, res, next) {
 
       // Build our relationship query and add to our relationshipPromises array to be run together
       let relationshipQuery = {};
-      relationshipQuery[searchField] = searchFilters[i].value;
+      relationshipQuery[searchField] = {};
+
+      // Convert and build with each operator string
+      if (searchFilters[i].operator === 'like') {
+        relationshipQuery[searchField]['$regex'] = new RegExp(searchFilters[i].value, 'i');
+      } else if (searchFilters[i].operator === 'not equal') {
+        relationshipQuery[searchField]['$ne'] = searchFilters[i].value;
+      } else {
+        relationshipQuery[searchField]['$eq'] = searchFilters[i].value;
+      }
+      
       relationshipPromises.push(relationshipClass.find(relationshipQuery, '_id'));
 
     } else {
