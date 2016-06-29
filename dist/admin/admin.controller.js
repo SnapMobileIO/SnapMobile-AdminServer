@@ -22,17 +22,21 @@ var _moment = require('moment');
 
 var _moment2 = _interopRequireDefault(_moment);
 
-var _snapmobileAws = require('snapmobile-aws');
-
 var _bluebird = require('bluebird');
 
 var _bluebird2 = _interopRequireDefault(_bluebird);
+
+var _mongoose = require('mongoose');
+
+var _mongoose2 = _interopRequireDefault(_mongoose);
+
+var _snapmobileAws = require('snapmobile-aws');
 
 var _adminHelper = require('./admin.helper.js');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-var utils;
+var utils = void 0;
 
 function setUtils(_utils) {
   utils = _utils;
@@ -56,8 +60,9 @@ function index(req, res, next) {
   var skip = Number(req.query.skip) || 0;
   var sort = req.query.sort || '-createdAt';
 
-  var searchFilters = req.query.filters;
-  var searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  var searchFilters = req.query.filters || [];
+  // let searchQuery = searchFilters.length ? utils.buildQuery(searchFilters) : {};
+  var searchQuery = {};
 
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
@@ -67,12 +72,118 @@ function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
-  req.class.find(searchQuery).count().then(function (count) {
+  console.log('****** searchFilters', searchFilters);
+  // console.log('****** searchQuery', searchQuery);
 
-    req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
-      return { itemCount: count, items: result };
-    }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
-  }).catch(utils.handleError(next));
+  var promises = [];
+  var queryOptions = [];
+  var nonRelFilter = [];
+
+  for (var i = searchFilters.length - 1; i >= 0; i--) {
+
+    // Check to see if there is a period in the filter field
+    // if so, we're looking for a relationship
+    var split = searchFilters[i].field.split('.');
+
+    if (split.length > 1) {
+      console.log('**** split 0', split[0]);
+      console.log('**** split 1', split[1]);
+
+      var searchClass = split[0];
+      var searchField = split[1];
+      var relationshipClassName = req.class.schema.paths[searchClass].options.ref;
+      var relationshipClass = _mongoose2.default.model(relationshipClassName);
+
+      var relationshipQuery = {};
+      relationshipQuery[searchField] = searchFilters[i].value;
+
+      queryOptions.push(split);
+      promises.push(relationshipClass.find(relationshipQuery, '_id'));
+    } else {
+      nonRelFilter.push(searchFilters[i]);
+    }
+  }
+
+  // Create a large list of IDs that we're looking for
+  var resultIds = [];
+
+  _bluebird2.default.all(promises).then(function (results) {
+
+    searchQuery['$and'] = [];
+
+    // Loop through the results to collect the ids for each relationship
+    for (var _i = results.length - 1; _i >= 0; _i--) {
+      resultIds = results[_i].map(function (o) {
+        return o._id.toString();
+      });
+      var obj = {};
+      obj[queryOptions[_i][0]] = { $in: resultIds };
+      searchQuery['$and'].push(obj);
+      console.log('*** searchQuery $and', searchQuery['$and']);
+    }
+
+    // Add on any non relationship stuff
+    var buildQuery = utils.buildQuery(nonRelFilter);
+
+    console.log('*** build query', buildQuery);
+    console.log('*** build query $and', buildQuery['$and']);
+    console.log('*** searchQuery $and 2', searchQuery['$and']);
+
+    // searchQuery = _.merge(searchQuery, buildQuery);
+
+    searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
+
+    console.log('**** search query', searchQuery);
+
+    // Now we can get all of our results with our IDs
+    return req.class.find(searchQuery).count().then(function (count) {
+
+      return req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
+        return { itemCount: count, items: result };
+      });
+    });
+  }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
+
+  // // If this is a search for a relationship, first get all of the documents
+  // // Then query the main class with an $in query
+
+  // let searchClass = '_ticket';
+
+  // console.log('**** schema', req.class.schema.paths[searchClass].options.ref);
+
+  // let relationshipClassName = req.class.schema.paths[searchClass].options.ref;
+
+  // // Get the relationship class
+  // let relationshipClass = mongoose.model(relationshipClassName);
+
+  // console.log('*****relationshipClassName', relationshipClass)
+
+  // // new RegExp(filter.value, 'i')
+  // let relationshipQuery = { ticketNumber: 'CHI008' };
+
+  // relationshipClass.find({ ticketNumber: 'CHI008' }, '_id')
+  //   .then((results) => {
+  //     // Collect the ids
+  //     let resultIds = results.map((o) => { return o._id });
+  //     console.log('*** resultIds', resultIds);
+
+  //     searchQuery = { _ticket: { $in: resultIds } };
+
+  //     return req.class.find(searchQuery).count()
+  //       .then(count => {
+
+  //         return req.class.find(searchQuery)
+  //           .populate(populatedFields)
+  //           .sort(sort)
+  //           .limit(limit)
+  //           .skip(skip)
+  //           .then((result) => {
+  //             return { itemCount: count, items: result };
+  //           });
+  //       });
+  //   })
+  //   .then(utils.respondWithResult(res, blacklistResponseAttributes))
+  //   .catch(utils.handleError(next));
 }
 
 /**

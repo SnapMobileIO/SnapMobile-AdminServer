@@ -2,11 +2,12 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-import { awsHelper } from 'snapmobile-aws';
 import Promise from 'bluebird';
+import mongoose from 'mongoose';
+import { awsHelper } from 'snapmobile-aws';
 import { convertToCsv, csvToArray } from './admin.helper.js';
 
-var utils;
+let utils;
 
 export function setUtils(_utils) {
   utils = _utils;
@@ -42,8 +43,9 @@ export function index(req, res, next) {
   let skip = Number(req.query.skip) || 0;
   let sort = req.query.sort || '-createdAt';
 
-  let searchFilters = req.query.filters;
-  let searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  let searchFilters = req.query.filters || [];
+  // let searchQuery = searchFilters.length ? utils.buildQuery(searchFilters) : {};
+  let searchQuery = {};
 
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
@@ -53,21 +55,75 @@ export function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
-  req.class.find(searchQuery).count()
-    .then(count => {
 
-      req.class.find(searchQuery)
-        .populate(populatedFields)
-        .sort(sort)
-        .limit(limit)
-        .skip(skip)
-        .then((result) => {
-          return { itemCount: count, items: result };
-        })
-        .then(utils.respondWithResult(res, blacklistResponseAttributes))
-        .catch(utils.handleError(next));
-    })
-    .catch(utils.handleError(next));
+
+
+  console.log('****** searchFilters', searchFilters);
+
+  let promises = [];
+  let queryOptions = [];
+  let nonRelFilter = [];
+
+  for (let i = searchFilters.length - 1; i >= 0; i--) {
+
+    // Check to see if there is a period in the filter field
+    // if so, we're looking for a relationship
+    let split = searchFilters[i].field.split('.');
+
+    if (split.length > 1) {
+      let searchClass = split[0];
+      let searchField = split[1];
+      let relationshipClassName = req.class.schema.paths[searchClass].options.ref;
+      let relationshipClass = mongoose.model(relationshipClassName);
+
+      let relationshipQuery = {};
+      relationshipQuery[searchField] = searchFilters[i].value;
+
+      queryOptions.push(split);
+      promises.push(relationshipClass.find(relationshipQuery, '_id'));
+
+    } else {
+      nonRelFilter.push(searchFilters[i]);
+    }
+  }
+
+  // Create a large list of IDs that we're looking for
+  let resultIds = [];
+
+  Promise.all(promises).then((results) => {
+
+    searchQuery['$and'] = [];
+
+    // Loop through the results to collect the ids for each relationship
+    for (let i = results.length - 1; i >= 0; i--) {
+      resultIds = results[i].map((o) => { return o._id.toString() });
+      let obj = {};
+      obj[queryOptions[i][0]] = { $in: resultIds };
+      searchQuery['$and'].push(obj);
+      console.log('*** searchQuery $and', searchQuery['$and']);
+    }
+
+    // Add on any non relationship stuff
+    let buildQuery = utils.buildQuery(nonRelFilter);
+
+    searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
+
+    // Now we can get all of our results with our IDs
+    return req.class.find(searchQuery).count()
+      .then(count => {
+
+        return req.class.find(searchQuery)
+          .populate(populatedFields)
+          .sort(sort)
+          .limit(limit)
+          .skip(skip)
+          .then((result) => {
+            return { itemCount: count, items: result };
+          });
+      });
+  })
+  .then(utils.respondWithResult(res, blacklistResponseAttributes))
+  .catch(utils.handleError(next));
 }
 
 /**
@@ -196,18 +252,18 @@ export function importFromCsv(req, res, next) {
     }
 
     let responseArray = csvToArray(responseString);
-    var erroredRows = {};
-    var finishedRows = 0;
+    let erroredRows = {};
+    let finishedRows = 0;
 
-    for (var i = 1; i < responseArray.length; i++) {
-      var object = {};
-      for (var j = 0; j < schemaHeaders.length; j++) {
+    for (let i = 1; i < responseArray.length; i++) {
+      let object = {};
+      for (let j = 0; j < schemaHeaders.length; j++) {
         if (schemaHeaders[j] != '_id' &&
           blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
           continue;
         }
 
-        var element = responseArray[i][j];
+        let element = responseArray[i][j];
 
         // If the element is undefined or null, convert to empty string
         if (!element) {
@@ -288,10 +344,10 @@ function returnIfFinished(res, finishedRows, responseArray, erroredRows) {
     if (numErrors == 0) {
       res.status(204).end();
     } else {
-      var errors = {};
-      var numErrorsToDisplay = 5;
+      let errors = {};
+      let numErrorsToDisplay = 5;
       let numExtraErrors = numErrors - numErrorsToDisplay;
-      for (var key in erroredRows) {
+      for (let key in erroredRows) {
         if (numErrorsToDisplay == 0) { continue; }
 
         numErrorsToDisplay--;
