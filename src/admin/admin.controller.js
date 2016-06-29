@@ -100,13 +100,17 @@ export function index(req, res, next) {
       let obj = {};
       obj[queryOptions[i][0]] = { $in: resultIds };
       searchQuery['$and'].push(obj);
-      console.log('*** searchQuery $and', searchQuery['$and']);
     }
 
     // Add on any non relationship stuff
     let buildQuery = utils.buildQuery(nonRelFilter);
 
     searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
+
+    // $and could be blank, which causes an error
+    searchQuery = !searchQuery['$and'].length ? {} : searchQuery;
+
+    console.log('*** searchQuery', searchQuery);
 
     // Now we can get all of our results with our IDs
     return req.class.find(searchQuery).count()

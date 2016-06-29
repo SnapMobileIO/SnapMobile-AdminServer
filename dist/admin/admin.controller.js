@@ -73,7 +73,6 @@ function index(req, res, next) {
   }
 
   console.log('****** searchFilters', searchFilters);
-  // console.log('****** searchQuery', searchQuery);
 
   var promises = [];
   var queryOptions = [];
@@ -86,9 +85,6 @@ function index(req, res, next) {
     var split = searchFilters[i].field.split('.');
 
     if (split.length > 1) {
-      console.log('**** split 0', split[0]);
-      console.log('**** split 1', split[1]);
-
       var searchClass = split[0];
       var searchField = split[1];
       var relationshipClassName = req.class.schema.paths[searchClass].options.ref;
@@ -119,21 +115,17 @@ function index(req, res, next) {
       var obj = {};
       obj[queryOptions[_i][0]] = { $in: resultIds };
       searchQuery['$and'].push(obj);
-      console.log('*** searchQuery $and', searchQuery['$and']);
     }
 
     // Add on any non relationship stuff
     var buildQuery = utils.buildQuery(nonRelFilter);
 
-    console.log('*** build query', buildQuery);
-    console.log('*** build query $and', buildQuery['$and']);
-    console.log('*** searchQuery $and 2', searchQuery['$and']);
-
-    // searchQuery = _.merge(searchQuery, buildQuery);
-
     searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
 
-    console.log('**** search query', searchQuery);
+    // $and could be blank, which causes an error
+    searchQuery = !searchQuery['$and'].length ? {} : searchQuery;
+
+    console.log('*** searchQuery', searchQuery);
 
     // Now we can get all of our results with our IDs
     return req.class.find(searchQuery).count().then(function (count) {
@@ -143,47 +135,6 @@ function index(req, res, next) {
       });
     });
   }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
-
-  // // If this is a search for a relationship, first get all of the documents
-  // // Then query the main class with an $in query
-
-  // let searchClass = '_ticket';
-
-  // console.log('**** schema', req.class.schema.paths[searchClass].options.ref);
-
-  // let relationshipClassName = req.class.schema.paths[searchClass].options.ref;
-
-  // // Get the relationship class
-  // let relationshipClass = mongoose.model(relationshipClassName);
-
-  // console.log('*****relationshipClassName', relationshipClass)
-
-  // // new RegExp(filter.value, 'i')
-  // let relationshipQuery = { ticketNumber: 'CHI008' };
-
-  // relationshipClass.find({ ticketNumber: 'CHI008' }, '_id')
-  //   .then((results) => {
-  //     // Collect the ids
-  //     let resultIds = results.map((o) => { return o._id });
-  //     console.log('*** resultIds', resultIds);
-
-  //     searchQuery = { _ticket: { $in: resultIds } };
-
-  //     return req.class.find(searchQuery).count()
-  //       .then(count => {
-
-  //         return req.class.find(searchQuery)
-  //           .populate(populatedFields)
-  //           .sort(sort)
-  //           .limit(limit)
-  //           .skip(skip)
-  //           .then((result) => {
-  //             return { itemCount: count, items: result };
-  //           });
-  //       });
-  //   })
-  //   .then(utils.respondWithResult(res, blacklistResponseAttributes))
-  //   .catch(utils.handleError(next));
 }
 
 /**
