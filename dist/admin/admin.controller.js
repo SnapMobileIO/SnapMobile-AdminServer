@@ -103,7 +103,7 @@ function index(req, res, next) {
   }
 
   // Run all of our relationship promises together and wait for them all to complete
-  _bluebird2.default.all(relationshipPromises).then(function (results) {
+  return _bluebird2.default.all(relationshipPromises).then(function (results) {
 
     // Start our $and array to be able to push filters on
     searchQuery['$and'] = [];

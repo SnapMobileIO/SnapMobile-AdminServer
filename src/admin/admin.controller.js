@@ -87,7 +87,7 @@ export function index(req, res, next) {
   }
 
   // Run all of our relationship promises together and wait for them all to complete
-  Promise.all(relationshipPromises)
+  return Promise.all(relationshipPromises)
     .then((results) => {
 
       // Start our $and array to be able to push filters on
