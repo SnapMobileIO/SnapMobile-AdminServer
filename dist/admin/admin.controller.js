@@ -22,17 +22,21 @@ var _moment = require('moment');
 
 var _moment2 = _interopRequireDefault(_moment);
 
-var _snapmobileAws = require('snapmobile-aws');
-
 var _bluebird = require('bluebird');
 
 var _bluebird2 = _interopRequireDefault(_bluebird);
+
+var _mongoose = require('mongoose');
+
+var _mongoose2 = _interopRequireDefault(_mongoose);
+
+var _snapmobileAws = require('snapmobile-aws');
 
 var _adminHelper = require('./admin.helper.js');
 
 function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
 
-var utils;
+var utils = void 0;
 
 function setUtils(_utils) {
   utils = _utils;
@@ -56,8 +60,8 @@ function index(req, res, next) {
   var skip = Number(req.query.skip) || 0;
   var sort = req.query.sort || '-createdAt';
 
-  var searchFilters = req.query.filters;
-  var searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  var searchFilters = req.query.filters || [];
+  var searchQuery = {};
 
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
@@ -67,12 +71,79 @@ function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
-  req.class.find(searchQuery).count().then(function (count) {
+  // We need to find any relationships that come through.
+  // They will look like "_user.firstName" and we try and split fields in our filter.
+  // Any that aren't relationships, we add to a separate array to run our .buildQuery()
+  // on them as usual. Add any relationship filters to our relationshipPromises array to run together.
+  var relationshipPromises = [];
+  var queryOptions = [];
+  var nonRelationshipFilters = [];
 
-    req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
-      return { itemCount: count, items: result };
-    }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
-  }).catch(utils.handleError(next));
+  // Find any relationship filters and typical / non-relationship filters
+  for (var i = searchFilters.length - 1; i >= 0; i--) {
+
+    // Check to see if there is a period in the filter field to denote a relationship
+    var split = searchFilters[i].field.split('.');
+
+    if (split.length > 1) {
+      var searchClass = split[0];
+      var searchField = split[1];
+      queryOptions.push(split);
+
+      var relationshipClassName = req.class.schema.paths[searchClass].options.ref;
+      var relationshipClass = _mongoose2.default.model(relationshipClassName);
+
+      // Build our relationship query and add to our relationshipPromises array to be run together
+      var relationshipQuery = {};
+      relationshipQuery[searchField] = {};
+
+      // Convert and build with each operator string
+      if (searchFilters[i].operator === 'like') {
+        relationshipQuery[searchField]['$regex'] = new RegExp(searchFilters[i].value, 'i');
+      } else if (searchFilters[i].operator === 'not equal') {
+        relationshipQuery[searchField]['$ne'] = searchFilters[i].value;
+      } else {
+        relationshipQuery[searchField]['$eq'] = searchFilters[i].value;
+      }
+
+      relationshipPromises.push(relationshipClass.find(relationshipQuery, '_id'));
+    } else {
+      nonRelationshipFilters.push(searchFilters[i]);
+    }
+  }
+
+  // Run all of our relationship promises together and wait for them all to complete
+  return _bluebird2.default.all(relationshipPromises).then(function (results) {
+
+    // Start our $and array to be able to push filters on
+    searchQuery['$and'] = [];
+
+    // Loop through the results to collect the IDs for each relationship
+    for (var _i = results.length - 1; _i >= 0; _i--) {
+      var resultIds = results[_i].map(function (o) {
+        return o._id.toString();
+      });
+      var tmpQuery = {};
+      tmpQuery[queryOptions[_i][0]] = { $in: resultIds };
+      searchQuery['$and'].push(tmpQuery);
+    }
+
+    // Run the buildQuery function on any typical filters that come through
+    // and concat it to any relationship filters we already found.
+    var buildQuery = utils.buildQuery(nonRelationshipFilters);
+    searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
+
+    // $and could be blank, which causes an error
+    searchQuery = !searchQuery['$and'].length ? {} : searchQuery;
+
+    // Our query should now include any typical filters along with any $in queries
+    return req.class.find(searchQuery).count().then(function (count) {
+
+      return req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
+        return { itemCount: count, items: result };
+      });
+    });
+  }).then(utils.respondWithResult(res, blacklistResponseAttributes)).catch(utils.handleError(next));
 }
 
 /**

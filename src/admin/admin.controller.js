@@ -2,11 +2,12 @@
 
 import _ from 'lodash';
 import moment from 'moment';
-import { awsHelper } from 'snapmobile-aws';
 import Promise from 'bluebird';
+import mongoose from 'mongoose';
+import { awsHelper } from 'snapmobile-aws';
 import { convertToCsv, csvToArray } from './admin.helper.js';
 
-var utils;
+let utils;
 
 export function setUtils(_utils) {
   utils = _utils;
@@ -42,8 +43,8 @@ export function index(req, res, next) {
   let skip = Number(req.query.skip) || 0;
   let sort = req.query.sort || '-createdAt';
 
-  let searchFilters = req.query.filters;
-  let searchQuery = !!searchFilters ? utils.buildQuery(searchFilters) : {};
+  let searchFilters = req.query.filters || [];
+  let searchQuery = {};
 
   // See if we have a populate method for our class
   // if we don't populatedFields should be blank
@@ -53,20 +54,86 @@ export function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
-  req.class.find(searchQuery).count()
-    .then(count => {
+  // We need to find any relationships that come through.
+  // They will look like "_user.firstName" and we try and split fields in our filter.
+  // Any that aren't relationships, we add to a separate array to run our .buildQuery()
+  // on them as usual. Add any relationship filters to our relationshipPromises array to run together.
+  let relationshipPromises = [];
+  let queryOptions = [];
+  let nonRelationshipFilters = [];
 
-      req.class.find(searchQuery)
-        .populate(populatedFields)
-        .sort(sort)
-        .limit(limit)
-        .skip(skip)
-        .then((result) => {
-          return { itemCount: count, items: result };
-        })
-        .then(utils.respondWithResult(res, blacklistResponseAttributes))
-        .catch(utils.handleError(next));
+  // Find any relationship filters and typical / non-relationship filters
+  for (let i = searchFilters.length - 1; i >= 0; i--) {
+
+    // Check to see if there is a period in the filter field to denote a relationship
+    let split = searchFilters[i].field.split('.');
+
+    if (split.length > 1) {
+      let searchClass = split[0];
+      let searchField = split[1];
+      queryOptions.push(split);
+
+      let relationshipClassName = req.class.schema.paths[searchClass].options.ref;
+      let relationshipClass = mongoose.model(relationshipClassName);
+
+      // Build our relationship query and add to our relationshipPromises array to be run together
+      let relationshipQuery = {};
+      relationshipQuery[searchField] = {};
+
+      // Convert and build with each operator string
+      if (searchFilters[i].operator === 'like') {
+        relationshipQuery[searchField]['$regex'] = new RegExp(searchFilters[i].value, 'i');
+      } else if (searchFilters[i].operator === 'not equal') {
+        relationshipQuery[searchField]['$ne'] = searchFilters[i].value;
+      } else {
+        relationshipQuery[searchField]['$eq'] = searchFilters[i].value;
+      }
+      
+      relationshipPromises.push(relationshipClass.find(relationshipQuery, '_id'));
+
+    } else {
+      nonRelationshipFilters.push(searchFilters[i]);
+    }
+  }
+
+  // Run all of our relationship promises together and wait for them all to complete
+  return Promise.all(relationshipPromises)
+    .then((results) => {
+
+      // Start our $and array to be able to push filters on
+      searchQuery['$and'] = [];
+
+      // Loop through the results to collect the IDs for each relationship
+      for (let i = results.length - 1; i >= 0; i--) {
+        let resultIds = results[i].map((o) => { return o._id.toString() });
+        let tmpQuery = {};
+        tmpQuery[queryOptions[i][0]] = { $in: resultIds };
+        searchQuery['$and'].push(tmpQuery);
+      }
+
+      // Run the buildQuery function on any typical filters that come through
+      // and concat it to any relationship filters we already found.
+      let buildQuery = utils.buildQuery(nonRelationshipFilters);
+      searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
+
+      // $and could be blank, which causes an error
+      searchQuery = !searchQuery['$and'].length ? {} : searchQuery;
+
+      // Our query should now include any typical filters along with any $in queries
+      return req.class.find(searchQuery).count()
+        .then(count => {
+
+          return req.class.find(searchQuery)
+            .populate(populatedFields)
+            .sort(sort)
+            .limit(limit)
+            .skip(skip)
+            .then((result) => {
+              return { itemCount: count, items: result };
+            });
+        });
     })
+    .then(utils.respondWithResult(res, blacklistResponseAttributes))
     .catch(utils.handleError(next));
 }
 
@@ -196,18 +263,18 @@ export function importFromCsv(req, res, next) {
     }
 
     let responseArray = csvToArray(responseString);
-    var erroredRows = {};
-    var finishedRows = 0;
+    let erroredRows = {};
+    let finishedRows = 0;
 
-    for (var i = 1; i < responseArray.length; i++) {
-      var object = {};
-      for (var j = 0; j < schemaHeaders.length; j++) {
+    for (let i = 1; i < responseArray.length; i++) {
+      let object = {};
+      for (let j = 0; j < schemaHeaders.length; j++) {
         if (schemaHeaders[j] != '_id' &&
           blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
           continue;
         }
 
-        var element = responseArray[i][j];
+        let element = responseArray[i][j];
 
         // If the element is undefined or null, convert to empty string
         if (!element) {
@@ -288,10 +355,10 @@ function returnIfFinished(res, finishedRows, responseArray, erroredRows) {
     if (numErrors == 0) {
       res.status(204).end();
     } else {
-      var errors = {};
-      var numErrorsToDisplay = 5;
+      let errors = {};
+      let numErrorsToDisplay = 5;
       let numExtraErrors = numErrors - numErrorsToDisplay;
-      for (var key in erroredRows) {
+      for (let key in erroredRows) {
         if (numErrorsToDisplay == 0) { continue; }
 
         numErrorsToDisplay--;
