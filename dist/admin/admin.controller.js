@@ -61,7 +61,6 @@ function index(req, res, next) {
   var sort = req.query.sort || '-createdAt';
 
   var searchFilters = req.query.filters || [];
-  // let searchQuery = searchFilters.length ? utils.buildQuery(searchFilters) : {};
   var searchQuery = {};
 
   // See if we have a populate method for our class
@@ -72,62 +71,62 @@ function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
-  console.log('****** searchFilters', searchFilters);
-
-  var promises = [];
+  // We need to find any relationships that come through.
+  // They will look like "_user.firstName" and we try and split fields in our filter.
+  // Any that aren't relationships, we add to a separate array to run our .buildQuery()
+  // on them as usual. Add any relationship filters to our relationshipPromises array to run together.
+  var relationshipPromises = [];
   var queryOptions = [];
-  var nonRelFilter = [];
+  var nonRelationshipFilters = [];
 
+  // Find any relationship filters and typical / non-relationship filters
   for (var i = searchFilters.length - 1; i >= 0; i--) {
 
-    // Check to see if there is a period in the filter field
-    // if so, we're looking for a relationship
+    // Check to see if there is a period in the filter field to denote a relationship
     var split = searchFilters[i].field.split('.');
 
     if (split.length > 1) {
       var searchClass = split[0];
       var searchField = split[1];
+      queryOptions.push(split);
+
       var relationshipClassName = req.class.schema.paths[searchClass].options.ref;
       var relationshipClass = _mongoose2.default.model(relationshipClassName);
 
+      // Build our relationship query and add to our relationshipPromises array to be run together
       var relationshipQuery = {};
       relationshipQuery[searchField] = searchFilters[i].value;
-
-      queryOptions.push(split);
-      promises.push(relationshipClass.find(relationshipQuery, '_id'));
+      relationshipPromises.push(relationshipClass.find(relationshipQuery, '_id'));
     } else {
-      nonRelFilter.push(searchFilters[i]);
+      nonRelationshipFilters.push(searchFilters[i]);
     }
   }
 
-  // Create a large list of IDs that we're looking for
-  var resultIds = [];
+  // Run all of our relationship promises together and wait for them all to complete
+  _bluebird2.default.all(relationshipPromises).then(function (results) {
 
-  _bluebird2.default.all(promises).then(function (results) {
-
+    // Start our $and array to be able to push filters on
     searchQuery['$and'] = [];
 
-    // Loop through the results to collect the ids for each relationship
+    // Loop through the results to collect the IDs for each relationship
     for (var _i = results.length - 1; _i >= 0; _i--) {
-      resultIds = results[_i].map(function (o) {
+      var resultIds = results[_i].map(function (o) {
         return o._id.toString();
       });
-      var obj = {};
-      obj[queryOptions[_i][0]] = { $in: resultIds };
-      searchQuery['$and'].push(obj);
+      var tmpQuery = {};
+      tmpQuery[queryOptions[_i][0]] = { $in: resultIds };
+      searchQuery['$and'].push(tmpQuery);
     }
 
-    // Add on any non relationship stuff
-    var buildQuery = utils.buildQuery(nonRelFilter);
-
+    // Run the buildQuery function on any typical filters that come through
+    // and concat it to any relationship filters we already found.
+    var buildQuery = utils.buildQuery(nonRelationshipFilters);
     searchQuery['$and'] = searchQuery['$and'].concat(buildQuery['$and']);
 
     // $and could be blank, which causes an error
     searchQuery = !searchQuery['$and'].length ? {} : searchQuery;
 
-    console.log('*** searchQuery', searchQuery);
-
-    // Now we can get all of our results with our IDs
+    // Our query should now include any typical filters along with any $in queries
     return req.class.find(searchQuery).count().then(function (count) {
 
       return req.class.find(searchQuery).populate(populatedFields).sort(sort).limit(limit).skip(skip).then(function (result) {
