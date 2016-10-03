@@ -267,6 +267,12 @@ function importFromCsv(req, res, next) {
         // If this element isn't a string, then we should try and parse it as JSON
         if (typeof element !== 'string') {
           element = JSON.parse(element);
+        } else {
+          // Since this is a CSV export, the array will be a string
+          // We can determine if it is an array by checking for []
+          if (element.substr(0, 1) === '[' && element.substr(-1, 1) === ']') {
+            element = JSON.parse(element);
+          }
         }
 
         object[schemaHeaders[j]] = element;
