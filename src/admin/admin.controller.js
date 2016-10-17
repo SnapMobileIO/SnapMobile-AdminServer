@@ -330,17 +330,17 @@ export function importFromCsv(req, res, next) {
  */
 function createWithRow(req, object, row, successCallback, errorCallback) {
   req.class.findById(object._id, (err, found) => {
-    if (found) { //update
-      req.class.update(object)
-      .then(function(result) {
-          successCallback(result, row);
-        }).catch(function(error) {
-          errorCallback(error, row);
-        });
+    if (found) {
+      req.class.findByIdAndUpdate(object._id, object)
+        .then(function(result) {
+            successCallback(result, row);
+          }).catch(function(error) {
+            errorCallback(error, row);
+          });
     } else {
       delete object._id;
       req.class.create(object)
-      .then(function(result) {
+        .then(function(result) {
           successCallback(result, row);
         }).catch(function(error) {
           errorCallback(error, row);

@@ -305,8 +305,7 @@ function importFromCsv(req, res, next) {
 function createWithRow(req, object, row, successCallback, errorCallback) {
   req.class.findById(object._id, function (err, found) {
     if (found) {
-      //update
-      req.class.update(object).then(function (result) {
+      req.class.findByIdAndUpdate(object._id, object).then(function (result) {
         successCallback(result, row);
       }).catch(function (error) {
         errorCallback(error, row);
