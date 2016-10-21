@@ -289,7 +289,17 @@ export function importFromCsv(req, res, next) {
           // Since this is a CSV export, the array will be a string
           // We can determine if it is an array by checking for []
           if (element.substr(0, 1) === '[' && element.substr(-1, 1) === ']') {
-            element = JSON.parse(element);
+            try {
+              element = JSON.parse(element);
+            }
+            catch (err) {
+              res.status(503).end(JSON.stringify(
+                { errors:
+                  { error:
+                    { message: 'Error parsing array' }
+                }
+              }));
+            }
           }
         }
 
