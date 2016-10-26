@@ -232,32 +232,36 @@ function importFromCsv(req, res, next) {
   var url = req.body.url;
   var response = _snapmobileAws.awsHelper.getFile(url);
   response.then(function (response) {
-    var responseString = response.Body.toString('utf8').replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
-    var lines = responseString.split('\n');
+    //remove empty lines at start and end
+    var responseString = response.Body.toString('utf8').replace(/^\s+|\s+$/g, '');
 
     var schemaHeaders = Object.keys(req.class.schema.paths);
-
-    var headerString = schemaHeaders.join(',');
-
-    // check if header matches schema
-    if (lines.length <= 1 || lines[0] !== headerString) {
-      res.status(400).end(JSON.stringify({ errors: { error: { message: 'CSV header does not match object' }
-        }
-      }));
-    }
-
     var responseArray = (0, _adminHelper.csvToArray)(responseString);
+    var csvHeaders = responseArray[0];
     var erroredRows = {};
     var finishedRows = 0;
 
-    for (var i = 1; i < responseArray.length; i++) {
+    // Make sure headers exist in schema first before continuing
+    for (var i = csvHeaders.length - 1; i >= 0; i--) {
+      if (schemaHeaders.indexOf(csvHeaders[i]) < 0) {
+        res.status(503).end(JSON.stringify({
+          errors: {
+            error: {
+              message: 'The header "' + csvHeaders[i] + '" does not match any properties in the schema'
+            }
+          }
+        }));
+      }
+    }
+
+    for (var _i2 = 1; _i2 < responseArray.length; _i2++) {
       var object = {};
-      for (var j = 0; j < schemaHeaders.length; j++) {
-        if (schemaHeaders[j] != '_id' && blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+      for (var j = 0; j < csvHeaders.length; j++) {
+        if (csvHeaders[j] != '_id' && blacklistRequestAttributes.indexOf(csvHeaders[j]) >= 0) {
           continue;
         }
 
-        var element = responseArray[i][j];
+        var element = responseArray[_i2][j];
 
         // If the element is undefined or null, convert to empty string
         if (!element) {
@@ -281,10 +285,10 @@ function importFromCsv(req, res, next) {
           }
         }
 
-        object[schemaHeaders[j]] = element;
+        object[csvHeaders[j]] = element;
       }
 
-      createWithRow(req, object, i, function (result, row) {
+      createWithRow(req, object, _i2, function (result, row) {
         finishedRows++;
         returnIfFinished(res, finishedRows, responseArray, erroredRows);
       }, function (error, row) {

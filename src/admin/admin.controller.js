@@ -244,33 +244,33 @@ export function importFromCsv(req, res, next) {
   let url = req.body.url;
   let response = awsHelper.getFile(url);
   response.then((response) => {
-    let responseString = response.Body.toString('utf8')
-      .replace(/^\s+|\s+$/g, ''); //remove empty lines at start and end
-    let lines = responseString.split('\n');
+    //remove empty lines at start and end
+    let responseString = response.Body.toString('utf8').replace(/^\s+|\s+$/g, '');
 
     let schemaHeaders = Object.keys(req.class.schema.paths);
-
-    let headerString = schemaHeaders.join(',');
-
-    // check if header matches schema
-    if (lines.length <= 1 || lines[0] !== headerString) {
-      res.status(400).end(JSON.stringify(
-        { errors:
-          { error:
-            { message: 'CSV header does not match object' }
-        }
-      }));
-    }
-
     let responseArray = csvToArray(responseString);
+    var csvHeaders = responseArray[0];
     let erroredRows = {};
     let finishedRows = 0;
 
+    // Make sure headers exist in schema first before continuing
+    for (var i = csvHeaders.length - 1; i >= 0; i--) {
+      if (schemaHeaders.indexOf(csvHeaders[i]) < 0) {
+        res.status(503).end(JSON.stringify({
+          errors: {
+            error: {
+              message: `The header "${csvHeaders[i]}" does not match any properties in the schema`
+            }
+          }
+        }));
+      }
+    }
+
     for (let i = 1; i < responseArray.length; i++) {
       let object = {};
-      for (let j = 0; j < schemaHeaders.length; j++) {
-        if (schemaHeaders[j] != '_id' &&
-          blacklistRequestAttributes.indexOf(schemaHeaders[j]) >= 0) {
+      for (let j = 0; j < csvHeaders.length; j++) {
+        if (csvHeaders[j] != '_id' &&
+          blacklistRequestAttributes.indexOf(csvHeaders[j]) >= 0) {
           continue;
         }
 
@@ -303,7 +303,7 @@ export function importFromCsv(req, res, next) {
           }
         }
 
-        object[schemaHeaders[j]] = element;
+        object[csvHeaders[j]] = element;
       }
 
       createWithRow(req, object, i, (result, row) => {

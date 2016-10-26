@@ -35,15 +35,15 @@ function convertToCsv(result, headers) {
         // Objects will be added to the CSV as '[Object object]', we want the object
       } else if (!!result[i][headers[x]] && (result[i][headers[x]].constructor === Array || result[i][headers[x]].constructor === Object)) {
 
-        // Stringify any objects that are in the db
+          // Stringify any objects that are in the db
 
-        jsonString = JSON.stringify(result[i][headers[x]]);
-        convertedString += '"' + String(jsonString).replace(/\"/g, '""') + '"';
+          jsonString = JSON.stringify(result[i][headers[x]]);
+          convertedString += '"' + String(jsonString).replace(/\"/g, '""') + '"';
 
-        // Double quotes and hanging quotes will break our CSV, replace with "" will fix it
-      } else {
-        convertedString += '"' + String(result[i][headers[x]]).replace(/\"/g, '""') + '"';
-      }
+          // Double quotes and hanging quotes will break our CSV, replace with "" will fix it
+        } else {
+            convertedString += '"' + String(result[i][headers[x]]).replace(/\"/g, '""') + '"';
+          }
     }
 
     convertedString += lineDelimiter;
@@ -58,7 +58,7 @@ function convertToCsv(result, headers) {
  * @param {String} strDelimiter Optional delimiter
  */
 function csvToArray(strData) {
-  var strDelimiter = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : ',';
+  var strDelimiter = arguments.length <= 1 || arguments[1] === undefined ? ',' : arguments[1];
 
   // Create a regular expression to parse the CSV values.
   var objPattern = new RegExp(
