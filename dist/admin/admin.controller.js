@@ -207,9 +207,11 @@ function update(req, res, next) {
  * Deletes a document from the DB
  */
 function destroy(req, res, next) {
-  req.class.findByIdAndRemove(req.params.id).then(utils.handleEntityNotFound(res)).then(function (result) {
+  req.class.findById(req.params.id).then(utils.handleEntityNotFound(res)).then(function (result) {
     if (result) {
-      res.status(204).end();
+      return result.remove(function () {
+        res.status(204).end();
+      });
     }
   }).catch(utils.handleError(next));
 }
@@ -218,9 +220,15 @@ function destroy(req, res, next) {
  * Deletes multiple documents from the DB
  */
 function destroyMultiple(req, res, next) {
-  req.class.remove({ _id: { $in: req.body.ids } }).then(utils.handleEntityNotFound(res)).then(function (result) {
-    if (result) {
-      res.status(204).end();
+  req.class.find({ _id: { $in: req.body.ids } }).then(function (results) {
+    if (results) {
+      var promiseArray = results.map(function (result) {
+        return result.remove();
+      });
+
+      return _bluebird2.default.each(promiseArray, function (result) {
+        res.status(204).end();
+      });
     }
   }).catch(utils.handleError(next));
 }
