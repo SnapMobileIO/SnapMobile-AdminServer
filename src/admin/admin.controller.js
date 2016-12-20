@@ -213,11 +213,13 @@ export function update(req, res, next) {
  * Deletes a document from the DB
  */
 export function destroy(req, res, next) {
-  req.class.findByIdAndRemove(req.params.id)
+  req.class.findById(req.params.id)
     .then(utils.handleEntityNotFound(res))
     .then(result => {
       if (result) {
-        res.status(204).end();
+        return result.remove(() => {
+          res.status(204).end();
+        });
       }
     })
     .catch(utils.handleError(next));
@@ -227,11 +229,16 @@ export function destroy(req, res, next) {
  * Deletes multiple documents from the DB
  */
 export function destroyMultiple(req, res, next) {
-  req.class.remove({ _id: { $in: req.body.ids } })
-    .then(utils.handleEntityNotFound(res))
-    .then(result => {
-      if (result) {
-        res.status(204).end();
+  req.class.find({ _id: { $in: req.body.ids } })
+    .then(results => {
+      if (results) {
+        let promiseArray = results.map((result) => {
+          return result.remove();
+        });
+
+        return Promise.each(promiseArray, (result) => {
+          res.status(204).end();
+        });
       }
     })
     .catch(utils.handleError(next));
