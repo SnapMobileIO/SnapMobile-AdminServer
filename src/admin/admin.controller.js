@@ -130,24 +130,69 @@ export function index(req, res, next) {
         .then(count => {
 
           return req.class.find(searchQuery)
+            .lean()
             .populate(populatedFields)
             .sort(sort)
             .limit(limit)
             .skip(skip)
-            .then((result) => {
+            .then((results) => {
 
-              if (shouldExport) {
-                let currentDate = moment().format('YYYY-MM-D');
-                let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
-                let headers = Object.keys(req.class.schema.paths);
-                let convertedString = convertToCsv(result, headers);
-                res.set('Content-Type', 'text/csv');
-                res.set('Content-Disposition', 'attachment; filename=' + filename);
-                res.send(convertedString);
-                return null;
+              // Perform any special admin functions on each document
+              if (typeof req.class.populateForAdminFunctions === 'function') {
+                let adminFunctions = req.class.populateForAdminFunctions();
+                let promiseArray = [];
+                let adminFunctionKeys = [];
+
+                _.forOwn(adminFunctions, (value, key) => {
+                  // Loop through all results to build promise array
+                  results.map((o) => {
+                    promiseArray.push(value(o[key]));
+                  });
+
+                  // Add key to array for tracking
+                  adminFunctionKeys.push(key);
+                });
+
+                return Promise.each(promiseArray, (o, i) => {
+                  // Get the index based on how many results have passed
+                  let revolutions = Math.floor(i / results.length);
+
+                  // Get the index of the original array based on revolutions
+                  let index = results.length - ((revolutions + 1) * results.length - i);
+
+                  // Replace the string at the index with the object
+                  results[index][adminFunctionKeys[revolutions]] = o;
+                })
+                .then(() => {
+                  if (shouldExport) {
+                    let currentDate = moment().format('YYYY-MM-D');
+                    let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
+                    let headers = Object.keys(req.class.schema.paths);
+                    let convertedString = convertToCsv(results, headers);
+                    res.set('Content-Type', 'text/csv');
+                    res.set('Content-Disposition', 'attachment; filename=' + filename);
+                    res.send(convertedString);
+                    return null;
+
+                  } else {
+                    return { itemCount: count, items: results };
+                  }
+                });
 
               } else {
-                return { itemCount: count, items: result };
+                if (shouldExport) {
+                  let currentDate = moment().format('YYYY-MM-D');
+                  let filename = `${req.class.modelName}-export-${currentDate}-.csv`;
+                  let headers = Object.keys(req.class.schema.paths);
+                  let convertedString = convertToCsv(results, headers);
+                  res.set('Content-Type', 'text/csv');
+                  res.set('Content-Disposition', 'attachment; filename=' + filename);
+                  res.send(convertedString);
+                  return null;
+
+                } else {
+                  return { itemCount: count, items: results };
+                }
               }
             });
         });
@@ -169,10 +214,32 @@ export function show(req, res, next) {
   }
 
   req.class.findOne({ _id: req.params.id })
+    .lean()
     .populate(populatedFields)
     .then(utils.handleEntityNotFound(res))
     .then((result) => {
-      return result;
+
+      // Perform any special admin functions on the document
+      if (typeof req.class.populateForAdminFunctions === 'function') {
+        let adminFunctions = req.class.populateForAdminFunctions();
+        let promiseArray = [];
+        let adminFunctionKeys = [];
+
+        _.forOwn(adminFunctions, (value, key) => {
+          promiseArray.push(value(result[key]));
+          adminFunctionKeys.push(key);
+        });
+
+        return Promise.each(promiseArray, (o, i) => {
+          result[adminFunctionKeys[i]] = o;
+        })
+        .then(() => {
+          return result;
+        });
+
+      } else {
+        return result;
+      }
     })
     .then(utils.respondWithResult(res, blacklistResponseAttributes))
     .catch(utils.handleError(next));
