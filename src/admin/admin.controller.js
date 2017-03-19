@@ -14,7 +14,6 @@ export function setUtils(_utils) {
 }
 
 const blacklistRequestAttributes = ['_id',
-                                    'password',
                                     'salt',
                                     'resetPasswordExpires',
                                     'resetPasswordToken',

@@ -44,7 +44,7 @@ function setUtils(_utils) {
   utils = _utils;
 }
 
-var blacklistRequestAttributes = ['_id', 'password', 'salt', 'resetPasswordExpires', 'resetPasswordToken', 'updatedAt', 'createdAt', '__v'];
+var blacklistRequestAttributes = ['_id', 'salt', 'resetPasswordExpires', 'resetPasswordToken', 'updatedAt', 'createdAt', '__v'];
 var blacklistResponseAttributes = ['_id', 'password', 'salt', 'resetPasswordExpires', 'resetPasswordToken', '__v'];
 
 /**
