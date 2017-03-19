@@ -361,7 +361,8 @@ export function importFromCsv(req, res, next) {
         } else {
           // Since this is a CSV export, the array will be a string
           // We can determine if it is an array by checking for []
-          if (element.substr(0, 1) === '[' && element.substr(-1, 1) === ']') {
+          if ((element.substr(0, 1) === '[' && element.substr(-1, 1) === ']') ||
+              (element.substr(0, 1) === '{' && element.substr(-1, 1) === '}')) {
             try {
               element = JSON.parse(element);
             }
