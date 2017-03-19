@@ -3,9 +3,6 @@
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-
-var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
-
 exports.setUtils = setUtils;
 exports.getSchema = getSchema;
 exports.index = index;
@@ -151,49 +148,43 @@ function index(req, res, next) {
 
         // Perform any special admin functions on each document
         if (typeof req.class.populateForAdminFunctions === 'function') {
-          var _ret = function () {
-            var adminFunctions = req.class.populateForAdminFunctions();
-            var promiseArray = [];
-            var adminFunctionKeys = [];
+          var adminFunctions = req.class.populateForAdminFunctions();
+          var promiseArray = [];
+          var adminFunctionKeys = [];
 
-            _lodash2.default.forOwn(adminFunctions, function (value, key) {
-              // Loop through all results to build promise array
-              results.map(function (o) {
-                promiseArray.push(value(o[key]));
-              });
-
-              // Add key to array for tracking
-              adminFunctionKeys.push(key);
+          _lodash2.default.forOwn(adminFunctions, function (value, key) {
+            // Loop through all results to build promise array
+            results.map(function (o) {
+              promiseArray.push(value(o[key]));
             });
 
-            return {
-              v: _bluebird2.default.each(promiseArray, function (o, i) {
-                // Get the index based on how many results have passed
-                var revolutions = Math.floor(i / results.length);
+            // Add key to array for tracking
+            adminFunctionKeys.push(key);
+          });
 
-                // Get the index of the original array based on revolutions
-                var index = results.length - ((revolutions + 1) * results.length - i);
+          return _bluebird2.default.each(promiseArray, function (o, i) {
+            // Get the index based on how many results have passed
+            var revolutions = Math.floor(i / results.length);
 
-                // Replace the string at the index with the object
-                results[index][adminFunctionKeys[revolutions]] = o;
-              }).then(function () {
-                if (shouldExport) {
-                  var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
-                  var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
-                  var headers = Object.keys(req.class.schema.paths);
-                  var convertedString = (0, _adminHelper.convertToCsv)(results, headers);
-                  res.set('Content-Type', 'text/csv');
-                  res.set('Content-Disposition', 'attachment; filename=' + filename);
-                  res.send(convertedString);
-                  return null;
-                } else {
-                  return { itemCount: count, items: results };
-                }
-              })
-            };
-          }();
+            // Get the index of the original array based on revolutions
+            var index = results.length - ((revolutions + 1) * results.length - i);
 
-          if ((typeof _ret === 'undefined' ? 'undefined' : _typeof(_ret)) === "object") return _ret.v;
+            // Replace the string at the index with the object
+            results[index][adminFunctionKeys[revolutions]] = o;
+          }).then(function () {
+            if (shouldExport) {
+              var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
+              var filename = req.class.modelName + '-export-' + currentDate + '-.csv';
+              var headers = Object.keys(req.class.schema.paths);
+              var convertedString = (0, _adminHelper.convertToCsv)(results, headers);
+              res.set('Content-Type', 'text/csv');
+              res.set('Content-Disposition', 'attachment; filename=' + filename);
+              res.send(convertedString);
+              return null;
+            } else {
+              return { itemCount: count, items: results };
+            }
+          });
         } else {
           if (shouldExport) {
             var currentDate = (0, _moment2.default)().format('YYYY-MM-D');
@@ -229,26 +220,20 @@ function show(req, res, next) {
 
     // Perform any special admin functions on the document
     if (typeof req.class.populateForAdminFunctions === 'function') {
-      var _ret2 = function () {
-        var adminFunctions = req.class.populateForAdminFunctions();
-        var promiseArray = [];
-        var adminFunctionKeys = [];
+      var adminFunctions = req.class.populateForAdminFunctions();
+      var promiseArray = [];
+      var adminFunctionKeys = [];
 
-        _lodash2.default.forOwn(adminFunctions, function (value, key) {
-          promiseArray.push(value(result[key]));
-          adminFunctionKeys.push(key);
-        });
+      _lodash2.default.forOwn(adminFunctions, function (value, key) {
+        promiseArray.push(value(result[key]));
+        adminFunctionKeys.push(key);
+      });
 
-        return {
-          v: _bluebird2.default.each(promiseArray, function (o, i) {
-            result[adminFunctionKeys[i]] = o;
-          }).then(function () {
-            return result;
-          })
-        };
-      }();
-
-      if ((typeof _ret2 === 'undefined' ? 'undefined' : _typeof(_ret2)) === "object") return _ret2.v;
+      return _bluebird2.default.each(promiseArray, function (o, i) {
+        result[adminFunctionKeys[i]] = o;
+      }).then(function () {
+        return result;
+      });
     } else {
       return result;
     }
@@ -357,7 +342,7 @@ function importFromCsv(req, res, next) {
         } else {
           // Since this is a CSV export, the array will be a string
           // We can determine if it is an array by checking for []
-          if (element.substr(0, 1) === '[' && element.substr(-1, 1) === ']') {
+          if (element.substr(0, 1) === '[' && element.substr(-1, 1) === ']' || element.substr(0, 1) === '{' && element.substr(-1, 1) === '}') {
             try {
               element = JSON.parse(element);
             } catch (err) {
