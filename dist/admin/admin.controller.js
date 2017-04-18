@@ -76,6 +76,11 @@ function index(req, res, next) {
     populatedFields = req.class.populateForAdmin();
   }
 
+  // Remove the limit so that the export is not limited by page
+  if (shouldExport) {
+    limit = null;
+  }
+
   // We need to find any relationships that come through.
   // They will look like "_user.firstName" and we try and split fields in our filter.
   // Any that aren't relationships, we add to a separate array to run our .buildQuery()
