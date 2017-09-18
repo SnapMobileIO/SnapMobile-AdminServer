@@ -1,4 +1,4 @@
-'use strict';
+import moment from 'moment';
 
 /**
  * @param  {Array} result Array of objects - results from database query
@@ -19,7 +19,7 @@ export function convertToCsv(result, headers) {
     for (let x = 0; x < headers.length; x++) {
 
       if (x > 0) { convertedString += columnDelimiter; };
-
+      
       // Undefined will show up in the CSV as 'undefined', we want ''
       if (result[i][headers[x]] === undefined || result[i][headers[x]] === null) {
         convertedString += '';
@@ -28,11 +28,15 @@ export function convertToCsv(result, headers) {
       } else if (!!result[i][headers[x]] &&
                 (result[i][headers[x]].constructor === Array ||
                  result[i][headers[x]].constructor === Object)) {
-
+            
         // Stringify any objects that are in the db
-
+        // Single quotes and hanging quotes will break CSV, replace with ""
         jsonString = JSON.stringify(result[i][headers[x]]);
-        convertedString += `"${String(jsonString).replace(/\"/g, '""')}"`;
+        convertedString += `"${String(jsonString).replace(/\"/g, '""').replace(/'/g, '""').replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '""$2"": ')}"`;
+
+      // Dates should be converted to a better format
+      } else if (result[i][headers[x]].constructor === Date) {
+        convertedString += moment(result[i][headers[x]]).format('YYYY-MM-DD HH:mm:ss');
 
       // Double quotes and hanging quotes will break our CSV, replace with "" will fix it
       } else {
@@ -43,7 +47,7 @@ export function convertToCsv(result, headers) {
     convertedString += lineDelimiter;
   }
 
-  return convertedString.replace(/'/g, '""').replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '""$2"": ');
+  return convertedString;
 }
 
 /**
